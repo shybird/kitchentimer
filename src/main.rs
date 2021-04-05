@@ -1,5 +1,5 @@
 extern crate termion;
-extern crate libc;
+extern crate signal_hook;
 mod alarm;
 mod clock;
 mod common;
@@ -7,6 +7,9 @@ mod layout;
 
 use std::{time, thread, env};
 use std::io::Write;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use signal_hook::flag;
 use termion::{clear, color, cursor, style};
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
@@ -24,11 +27,20 @@ const USAGE: &str =
   -e, --exec [COMMAND]  Execute \"COMMAND\" on alarm. Must be the last flag on
                         the command line. Everything after it is passed as
                         argument to \"COMMAND\". Every \"%s\" will be replaced
-                        with the elapsed time in [(HH:)MM:SS] format.";
+                        with the elapsed time in [(HH:)MM:SS] format.
+
+SIGNALS: <SIGUSR1> Reset clock.
+         <SIGUSR2> Pause or un-pause clock.";
 const MENUBAR: &str =
 "[0-9] Add alarm  [d] Delete alarm  [SPACE] Pause  [r] Reset  [c] Clear color  [q] Quit";
 const MENUBAR_SHORT: &str =
 "[0-9] Add  [d] Delete  [SPACE] Pause  [r] Reset  [c] Clear  [q] Quit";
+// Needed for signal_hook.
+const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
+const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
+const SIGINT: usize = signal_hook::consts::SIGINT as usize;
+const SIGUSR1: usize = signal_hook::consts::SIGUSR1 as usize;
+const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
 
 pub struct Config {
     plain: bool,
@@ -55,6 +67,10 @@ fn main() {
     let mut buffer = String::new();
     let mut buffer_updated: bool = false;
     let mut countdown = Countdown::new();
+
+    // Register signal handlers.
+    let signal = Arc::new(AtomicUsize::new(0));
+    register_signal_handlers(&signal);
     
     // Clear screen and hide cursor.
     write!(stdout,
@@ -67,6 +83,29 @@ fn main() {
         });
 
     loop {
+        // Process received signals.
+        match signal.swap(0, Ordering::Relaxed) {
+            // No signal received.
+            0 => (),
+            // Suspend execution on SIGTSTP.
+            SIGTSTP => {
+                suspend(&mut stdout);
+                layout.force_redraw = true;
+            },
+            // Exit main loop on SIGTERM and SIGINT.
+            SIGTERM | SIGINT => break,
+            // Reset clock on SIGUSR1.
+            SIGUSR1 => {
+                clock.reset();
+                alarm_roster.reset_all();
+                layout.force_redraw = true;
+            },
+            // (Un-)Pause clock on SIGUSR2.
+            SIGUSR2 => clock.toggle(),
+            // We didn't register anything else.
+            _ => unreachable!(),
+        }
+
         // Process input.
         if let Some(key) = input_keys.next() {
             match key.expect("Error reading input") {
@@ -269,7 +308,15 @@ fn parse_args(config: &mut Config) {
     }
 }
 
-// Suspend execution by raising SIGTSTP.
+fn register_signal_handlers(signal: &Arc<AtomicUsize>) {
+    flag::register_usize(SIGTSTP as i32, Arc::clone(&signal), SIGTSTP).unwrap();
+    flag::register_usize(SIGTERM as i32, Arc::clone(&signal), SIGTERM).unwrap();
+    flag::register_usize(SIGINT as i32, Arc::clone(&signal), SIGINT).unwrap();
+    flag::register_usize(SIGUSR1 as i32, Arc::clone(&signal), SIGUSR1).unwrap();
+    flag::register_usize(SIGUSR2 as i32, Arc::clone(&signal), SIGUSR2).unwrap();
+}
+
+// Suspend execution on SIGTSTP.
 fn suspend<W: Write>(stdout: &mut RawTerminal<W>) {
     write!(stdout,
         "{}{}{}",
@@ -283,9 +330,8 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>) {
             eprintln!("Failed to leave raw terminal mode prior to suspend: {}", error);
         });
 
-    let result = unsafe { libc::raise(libc::SIGTSTP) };
-    if result != 0 {
-        panic!("{}", std::io::Error::last_os_error());
+    if let Err(error) = signal_hook::low_level::emulate_default_handler(SIGTSTP as i32) {
+        eprintln!("Error raising SIGTSTP: {}", error);
     }
 
     stdout.activate_raw_mode()
