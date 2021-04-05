@@ -262,19 +262,20 @@ pub fn alarm_exec(config: &Config, elapsed: u32) {
         time = format!("{:02}:{:02}:{:02}", elapsed /3600, (elapsed / 60) % 60, elapsed % 60);
     }
 
-    // Replace every occurrence of "%s".
-    for s in config.alarm_exec.iter() {
-        args.push(s.replace("%s", &time));
-    }
+    if let Some(exec) = &config.alarm_exec {
+        // Replace every occurrence of "%s".
+        for s in exec {
+            args.push(s.replace("%s", &time));
+        }
 
-    if Command::new(
-        &config.alarm_exec[0])
-        .args(&args[1..])
-        .stdout(Stdio::null())
-        .stdin(Stdio::null())
-        .spawn().is_err() {
+        if Command::new(&exec[0])
+            .args(&args[1..])
+            .stdout(Stdio::null())
+            .stdin(Stdio::null())
+            .spawn().is_err() {
 
-        eprintln!("Error: Could not execute command");
+            eprintln!("Error: Could not execute command");
+        }
     }
 }
 

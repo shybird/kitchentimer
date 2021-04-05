@@ -32,14 +32,14 @@ const MENUBAR_SHORT: &str =
 
 pub struct Config {
     plain: bool,
-    alarm_exec: Vec<String>,
+    alarm_exec: Option<Vec<String>>,
 }
 
 
 fn main() {
     let mut config = Config {
         plain: false,
-        alarm_exec: Vec::new(),
+        alarm_exec: None,
     };
     parse_args(&mut config);
 
@@ -179,7 +179,8 @@ fn main() {
                 write!(stdout, "{}", 0x07 as char).unwrap();
                 layout.force_redraw = true;
 
-                if config.alarm_exec.len() > 0 {
+                // Run command if configured.
+                if config.alarm_exec.is_some() {
                     alarm_exec(&config, clock.elapsed);
                 }
             }
@@ -254,10 +255,11 @@ fn parse_args(config: &mut Config) {
                 // Find position of this flag.
                 let i = env::args().position(|s| { s == "-e" || s == "--exec" }).unwrap();
                 // Copy everything thereafter.
-                config.alarm_exec = env::args().skip(i + 1).collect();
-                if config.alarm_exec.len() == 0 {
+                let exec: Vec<String> = env::args().skip(i + 1).collect();
+                if exec.len() == 0 {
                     usage();
                 } else {
+                    config.alarm_exec = Some(exec);
                     // Ignore everything after this flag.
                     break;
                 }
