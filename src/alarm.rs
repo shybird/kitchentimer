@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::atomic::Ordering;
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use crate::{Clock, Config, Layout, Position};
@@ -239,7 +240,7 @@ impl AlarmRoster {
         // Update layout information.
         if layout.roster_width != width {
             layout.roster_width = width;
-            layout.force_recalc = true;
+            layout.force_recalc.store(true, Ordering::Relaxed);
         }
     }
 

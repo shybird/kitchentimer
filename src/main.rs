@@ -37,6 +37,8 @@ const MENUBAR_SHORT: &str =
 "[0-9] Add  [d] Delete  [SPACE] Pause  [r] Reset  [c] Clear  [q] Quit";
 // Needed for signal_hook.
 const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
+const SIGWINCH: usize = signal_hook::consts::SIGWINCH as usize;
+const SIGCONT: usize = signal_hook::consts::SIGCONT as usize;
 const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
 const SIGINT: usize = signal_hook::consts::SIGINT as usize;
 const SIGUSR1: usize = signal_hook::consts::SIGUSR1 as usize;
@@ -71,8 +73,9 @@ fn main() {
     // Register signal handlers.
     let signal = Arc::new(AtomicUsize::new(0));
     register_signal_handlers(&signal);
+    flag::register(SIGWINCH as i32, Arc::clone(&layout.force_recalc)).unwrap();
     
-    // Clear screen and hide cursor.
+    // Clear window and hide cursor.
     write!(stdout,
         "{}{}",
         clear::All,
@@ -91,6 +94,14 @@ fn main() {
             // Suspend execution on SIGTSTP.
             SIGTSTP => {
                 suspend(&mut stdout);
+                // Clear SIGCONT and continue from here.
+                signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
+                continue_after_suspend(&mut stdout);
+                layout.force_redraw = true;
+            },
+            // Continuing after SIGSTOP.
+            SIGCONT => {
+                continue_after_suspend(&mut stdout);
                 layout.force_redraw = true;
             },
             // Exit main loop on SIGTERM and SIGINT.
@@ -103,6 +114,8 @@ fn main() {
             },
             // (Un-)Pause clock on SIGUSR2.
             SIGUSR2 => clock.toggle(),
+            // Window size changed.
+            //SIGWINCH => layout.force_recalc = true,
             // We didn't register anything else.
             _ => unreachable!(),
         }
@@ -141,6 +154,9 @@ fn main() {
                 // Suspend an ^Z.
                 Key::Ctrl('z') => {
                     suspend(&mut stdout);
+                    // Clear SIGCONT and continue from here.
+                    signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
+                    continue_after_suspend(&mut stdout);
                     layout.force_redraw = true;
                 },
                 // Enter.
@@ -197,7 +213,7 @@ fn main() {
                 clock.start.elapsed().as_secs() as u32
             };
 
-        // Update screen content if necessary.
+        // Update window content if necessary.
         if elapsed != clock.elapsed || layout.force_redraw  {
             // Update clock. Advance one day after 24 hours.
             if elapsed < 24 * 60 * 60 {
@@ -206,12 +222,14 @@ fn main() {
                 clock.next_day();
                 // "clock.elapsed" set by "clock.next_day()".
                 alarm_roster.reset_all();
-                layout.force_recalc = true;
+                layout.force_recalc.store(true, Ordering::Relaxed);
             }
 
             // Force recalculation of layout if we start displaying hours.
-            if clock.elapsed == 3600 { layout.force_recalc = true };
-            // Update screen size information and calculate the clock position.
+            if clock.elapsed == 3600 { 
+                layout.force_recalc.store(true, Ordering::Relaxed);
+            }
+            // Update window size information and calculate the clock position.
             layout.update(clock.elapsed >= 3600);
 
             // Check for exceeded alarms.
@@ -226,7 +244,7 @@ fn main() {
                 }
             }
 
-            // Clear the screen and redraw menu bar, alarm roster and buffer if
+            // Clear the window and redraw menu bar, alarm roster and buffer if
             // requested.
             if layout.force_redraw {
                 write!(stdout,
@@ -268,7 +286,7 @@ fn main() {
         thread::sleep(time::Duration::from_millis(100));
     }
 
-    // Main loop exited. Clear screen and restore cursor.
+    // Main loop exited. Clear window and restore cursor.
     write!(stdout,
         "{}{}{}",
         clear::BeforeCursor,
@@ -312,6 +330,7 @@ fn parse_args(config: &mut Config) {
 
 fn register_signal_handlers(signal: &Arc<AtomicUsize>) {
     flag::register_usize(SIGTSTP as i32, Arc::clone(&signal), SIGTSTP).unwrap();
+    flag::register_usize(SIGCONT as i32, Arc::clone(&signal), SIGCONT).unwrap();
     flag::register_usize(SIGTERM as i32, Arc::clone(&signal), SIGTERM).unwrap();
     flag::register_usize(SIGINT as i32, Arc::clone(&signal), SIGINT).unwrap();
     flag::register_usize(SIGUSR1 as i32, Arc::clone(&signal), SIGUSR1).unwrap();
@@ -335,7 +354,10 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>) {
     if let Err(error) = signal_hook::low_level::emulate_default_handler(SIGTSTP as i32) {
         eprintln!("Error raising SIGTSTP: {}", error);
     }
+}
 
+// Set up terminal when continuing from SIGTSTP or SIGSTOP.
+fn continue_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
     stdout.activate_raw_mode()
         .unwrap_or_else(|error| {
             eprintln!("Failed to re-enter raw terminal mode after suspend: {}", error);
@@ -349,6 +371,7 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>) {
             eprintln!("Error writing to stdout: {}", error);
             std::process::exit(1);
         });
+    stdout.flush().unwrap();
 }
 
 // Draw input buffer.

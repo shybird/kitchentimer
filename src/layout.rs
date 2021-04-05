@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::Config;
 use crate::common::*;
 
@@ -13,7 +15,7 @@ pub struct Position {
 
 pub struct Layout {
     pub force_redraw: bool, // Redraw elements on screen.
-    pub force_recalc: bool, // Recalculate position of elements.
+    pub force_recalc: Arc<AtomicBool>, // Recalculate position of elements.
     pub plain: bool, // Plain style clock.
     pub width: u16,
     pub height: u16,
@@ -34,7 +36,8 @@ impl Layout {
     pub fn new(config: &Config) -> Layout {
         Layout {
             force_redraw: true,
-            force_recalc: false,
+            // May be set by signal handler (SIGWINCH).
+            force_recalc: Arc::new(AtomicBool::new(true)),
             plain: config.plain,
             width: 0,
             height: 0,
@@ -53,15 +56,13 @@ impl Layout {
     }
 
     pub fn update(&mut self, display_hours: bool) {
-        let (width, height) = termion::terminal_size()
-            .expect("Could not read terminal size!");
-
-        if self.force_recalc || self.width != width || self.height != height {
+        if self.force_recalc.swap(false, Ordering::Relaxed) {
+            let (width, height) = termion::terminal_size()
+                .expect("Could not read terminal size!");
             self.width = width;
             self.height = height;
             self.compute(display_hours);
             self.force_redraw = true;
-            self.force_recalc = false;
         }
     }
 
