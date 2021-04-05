@@ -82,6 +82,7 @@ fn main() {
             std::process::exit(1);
         });
 
+    // Enter main loop.
     loop {
         // Process received signals.
         match signal.swap(0, Ordering::Relaxed) {
@@ -176,6 +177,7 @@ fn main() {
                         buffer_updated = true;
                     }
                 },
+                // Any other key.
                 _ => (),
             }
         }
@@ -190,7 +192,7 @@ fn main() {
         let elapsed = if clock.paused {
                 clock.elapsed
             } else {
-                // Should never owerflow as we reestablish a new "start"
+                // Should never overflow as we reestablish a new "start"
                 // instant every 24 hours.
                 clock.start.elapsed().as_secs() as u32
             };
