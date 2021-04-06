@@ -55,8 +55,8 @@ impl Layout {
         }
     }
 
-    pub fn update(&mut self, display_hours: bool) {
-        if self.force_recalc.swap(false, Ordering::Relaxed) {
+    pub fn update(&mut self, display_hours: bool, force: bool) {
+        if self.force_recalc.swap(false, Ordering::Relaxed) || force {
             let (width, height) = termion::terminal_size()
                 .expect("Could not read terminal size!");
             self.width = width;

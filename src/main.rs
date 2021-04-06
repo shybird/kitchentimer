@@ -231,12 +231,10 @@ fn main() {
                 layout.force_recalc.store(true, Ordering::Relaxed);
             }
 
-            // Force recalculation of layout if we start displaying hours.
-            if clock.elapsed == 3600 { 
-                layout.force_recalc.store(true, Ordering::Relaxed);
-            }
             // Update window size information and calculate the clock position.
-            layout.update(clock.elapsed >= 3600);
+            // Also enforce recalculation of layout if we start displaying
+            // hours.
+            layout.update(clock.elapsed >= 3600, clock.elapsed == 3600);
 
             // Check for exceeded alarms.
             if alarm_roster.check(&mut clock, &layout, &mut countdown) {
