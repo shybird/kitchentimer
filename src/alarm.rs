@@ -78,6 +78,7 @@ impl AlarmRoster {
         }
     }
 
+    // Parse string and add as alarm.
     pub fn add(&mut self, buffer: &String)
         -> Result<(), &'static str> {
 
@@ -87,7 +88,7 @@ impl AlarmRoster {
         // Parse input into seconds.
         if buffer.find(':').is_some() {
             for sub in buffer.rsplit(':') {
-                if sub.len() > 0 {
+                if !sub.is_empty() {
                     match sub.parse::<u32>() {
                         Ok(d) if d < 60 && index < 3 => time += d * 60u32.pow(index),
                         Ok(_) => return Err("Could not parse as time."),

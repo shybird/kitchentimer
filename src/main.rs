@@ -22,14 +22,17 @@ use layout::{Layout, Position};
 const NAME: &str = "kitchentimer";
 const VERSION: &str = "0.0.1";
 const USAGE: &str =
-"USAGE: kitchentimer [-h|-v] [-p|--plain] [-e|--exec COMMAND [...]]
+"USAGE: kitchentimer [-h|-v] [-p] [ALARM TIME(s)] [-e|--exec COMMAND [...]]
+PARAMETERS:
+  [ALARM TIME]          None or multiple alarm times (HH:MM:SS).
+OPTIONS:
   -h, --help            Display this help.
   -v, --version         Display version information.
   -p, --plain           Use simpler block chars.
-  -e, --exec [COMMAND]  Execute \"COMMAND\" on alarm. Must be the last flag on
+  -e, --exec [COMMAND]  Execute COMMAND on alarm. Must be the last flag on
                         the command line. Everything after it is passed as
-                        argument to \"COMMAND\". Every \"%s\" will be replaced
-                        with the elapsed time in [(HH:)MM:SS] format.
+                        argument to COMMAND. Every \"%s\" will be replaced
+                        with the elapsed time in (HH:)MM:SS format.
 
 SIGNALS: <SIGUSR1> Reset clock.
          <SIGUSR2> Pause or un-pause clock.";
@@ -57,7 +60,8 @@ fn main() {
         plain: false,
         alarm_exec: None,
     };
-    parse_args(&mut config);
+    let mut alarm_roster = AlarmRoster::new();
+    parse_args(&mut config, &mut alarm_roster);
 
     let mut stdout = std::io::stdout().into_raw_mode()
         .unwrap_or_else(|error| {
@@ -67,7 +71,6 @@ fn main() {
     let mut input_keys = termion::async_stdin().keys();
     let mut layout = Layout::new(&config);
     let mut clock = Clock::new();
-    let mut alarm_roster = AlarmRoster::new();
     let mut buffer = String::new();
     let mut buffer_updated: bool = false;
     let mut countdown = Countdown::new();
@@ -167,7 +170,7 @@ fn main() {
                 },
                 // Enter.
                 Key::Char('\n') => {
-                    if buffer.len() > 0 {
+                    if !buffer.is_empty() {
                         if let Err(e) = alarm_roster.add(&buffer) {
                             // Error while processing input buffer.
                             error_msg(&mut stdout, &layout, e);
@@ -194,7 +197,7 @@ fn main() {
                     if c.is_ascii_digit() {
                         buffer.push(c);
                         buffer_updated = true;
-                    } else if buffer.len() > 0 && c == ':' {
+                    } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
                         buffer_updated = true;
                     }
@@ -305,7 +308,7 @@ fn usage() {
 }
 
 // Parse command line arguments into "config".
-fn parse_args(config: &mut Config) {
+fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
     for arg in env::args().skip(1) {
         match arg.as_str() {
             "-h" | "--help" => usage(),
@@ -319,7 +322,7 @@ fn parse_args(config: &mut Config) {
                 let i = env::args().position(|s| { s == "-e" || s == "--exec" }).unwrap();
                 // Copy everything thereafter.
                 let exec: Vec<String> = env::args().skip(i + 1).collect();
-                if exec.len() == 0 {
+                if exec.is_empty() {
                     usage();
                 } else {
                     config.alarm_exec = Some(exec);
@@ -327,11 +330,17 @@ fn parse_args(config: &mut Config) {
                     break;
                 }
             },
-            unknown => {
+            any if any.starts_with('-') => {
                 // Unrecognized flag.
-                println!("Unrecognized parameter: \"{}\"", unknown);
+                println!("Unrecognized option: \"{}\"", any);
                 println!("Use \"-h\" or \"--help\" for a list of valid command line options");
                 std::process::exit(1);
+            },
+            any => {
+                if let Err(error) = alarm_roster.add(&String::from(any)) {
+                    println!("Error adding \"{}\" as alarm. ({})", any, error);
+                    std::process::exit(1);
+                }
             },
         }
     }
@@ -390,7 +399,7 @@ fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
 
 // Draw input buffer.
 fn draw_buffer<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, buffer: &String) {
-    if buffer.len() > 0 {
+    if !buffer.is_empty() {
         write!(stdout,
             "{}{}Add alarm: {}",
             cursor::Goto(layout.buffer.col, layout.buffer.line),
