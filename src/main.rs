@@ -74,8 +74,7 @@ fn main() {
 
     // Register signal handlers.
     let signal = Arc::new(AtomicUsize::new(0));
-    register_signal_handlers(&signal);
-    flag::register(SIGWINCH as i32, Arc::clone(&layout.force_recalc)).unwrap();
+    register_signal_handlers(&signal, &layout);
     
     // Clear window and hide cursor.
     write!(stdout,
@@ -96,14 +95,17 @@ fn main() {
             // Suspend execution on SIGTSTP.
             SIGTSTP => {
                 suspend(&mut stdout);
-                // Clear SIGCONT and continue from here.
+                // Clear SIGCONT, as we have already taken care to reset the
+                // terminal.
                 signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
-                continue_after_suspend(&mut stdout);
                 layout.force_redraw = true;
+                // Jump to the start of the main loop.
+                continue;
             },
             // Continuing after SIGSTOP.
             SIGCONT => {
-                continue_after_suspend(&mut stdout);
+                // This is reached when the process was suspended by SIGSTOP.
+                restore_after_suspend(&mut stdout);
                 layout.force_redraw = true;
             },
             // Exit main loop on SIGTERM and SIGINT.
@@ -112,12 +114,11 @@ fn main() {
             SIGUSR1 => {
                 clock.reset();
                 alarm_roster.reset_all();
+                layout.force_recalc.store(true, Ordering::Relaxed);
                 layout.force_redraw = true;
             },
             // (Un-)Pause clock on SIGUSR2.
             SIGUSR2 => clock.toggle(),
-            // Window size changed.
-            //SIGWINCH => layout.force_recalc = true,
             // We didn't register anything else.
             _ => unreachable!(),
         }
@@ -129,6 +130,7 @@ fn main() {
                 Key::Char('r') => {
                     clock.reset();
                     alarm_roster.reset_all();
+                    layout.force_recalc.store(true, Ordering::Relaxed);
                     layout.force_redraw = true;
                 },
                 // (Un-)Pause on space.
@@ -156,10 +158,12 @@ fn main() {
                 // Suspend an ^Z.
                 Key::Ctrl('z') => {
                     suspend(&mut stdout);
-                    // Clear SIGCONT and continue from here.
+                    // Clear SIGCONT, as we have already taken care to reset
+                    // the terminal.
                     signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
-                    continue_after_suspend(&mut stdout);
                     layout.force_redraw = true;
+                    // Jump to the start of the main loop.
+                    continue;
                 },
                 // Enter.
                 Key::Char('\n') => {
@@ -335,17 +339,21 @@ fn parse_args(config: &mut Config) {
     }
 }
 
-fn register_signal_handlers(signal: &Arc<AtomicUsize>) {
+fn register_signal_handlers(signal: &Arc<AtomicUsize>, layout: &Layout) {
+
     flag::register_usize(SIGTSTP as i32, Arc::clone(&signal), SIGTSTP).unwrap();
     flag::register_usize(SIGCONT as i32, Arc::clone(&signal), SIGCONT).unwrap();
     flag::register_usize(SIGTERM as i32, Arc::clone(&signal), SIGTERM).unwrap();
     flag::register_usize(SIGINT as i32, Arc::clone(&signal), SIGINT).unwrap();
     flag::register_usize(SIGUSR1 as i32, Arc::clone(&signal), SIGUSR1).unwrap();
     flag::register_usize(SIGUSR2 as i32, Arc::clone(&signal), SIGUSR2).unwrap();
+
+    // SIGWINCH sets "force_recalc" directly.
+    flag::register(SIGWINCH as i32, Arc::clone(&layout.force_recalc)).unwrap();
 }
 
 // Suspend execution on SIGTSTP.
-fn suspend<W: Write>(stdout: &mut RawTerminal<W>) {
+fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>) {
     write!(stdout,
         "{}{}{}",
         cursor::Goto(1,1),
@@ -361,10 +369,12 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>) {
     if let Err(error) = signal_hook::low_level::emulate_default_handler(SIGTSTP as i32) {
         eprintln!("Error raising SIGTSTP: {}", error);
     }
+
+    restore_after_suspend(&mut stdout);
 }
 
-// Set up terminal when continuing from SIGTSTP or SIGSTOP.
-fn continue_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
+// Set up terminal after SIGTSTP or SIGSTOP.
+fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
     stdout.activate_raw_mode()
         .unwrap_or_else(|error| {
             eprintln!("Failed to re-enter raw terminal mode after suspend: {}", error);
@@ -378,7 +388,6 @@ fn continue_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
             eprintln!("Error writing to stdout: {}", error);
             std::process::exit(1);
         });
-    stdout.flush().unwrap();
 }
 
 // Draw input buffer.

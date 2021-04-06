@@ -85,21 +85,25 @@ impl AlarmRoster {
         let mut time: u32 = 0;
 
         // Parse input into seconds.
-        for sub in buffer.rsplit(':') {
-            if sub.len() > 0 {
-                let d = sub.parse::<u32>();
-                match d {
-                    Ok(d) => time += d * 60u32.pow(index),
-                    Err(_) => return Err("Could not parse number as <u32>."),
+        if buffer.find(':').is_some() {
+            for sub in buffer.rsplit(':') {
+                if sub.len() > 0 {
+                    match sub.parse::<u32>() {
+                        Ok(d) if d < 60 && index < 3 => time += d * 60u32.pow(index),
+                        Ok(_) => return Err("Could not parse as time."),
+                        Err(_) => return Err("Could not parse number as <u32>."),
+                    }
                 }
+                index += 1;
             }
-            index += 1;
-
-            // More than 3 fields are an error.
-            if index > 3 { return Err("Too many colons to parse.") };
+        } else {
+            match buffer.parse::<u32>() {
+                Ok(d) => time = d,
+                Err(_) => return Err("Could not parse as <u32>."),
+            }
         }
 
-        // Skip if time evaluated to zero.
+        // Skip if time is out of boundaries.
         if time == 0 { return Err("Evaluates to zero.") };
         if time >= 24 * 60 * 60 { return Err("Values >24h not supported.") };
 
@@ -143,7 +147,7 @@ impl AlarmRoster {
         let mut index = 0;
 
         for alarm in &mut self.list {
-            // Ignore alarms already marked exceeded.
+            // Ignore alarms marked exceeded.
             if !alarm.exceeded {
                 if alarm.time <= clock.elapsed {
                     // Found alarm to raise.
