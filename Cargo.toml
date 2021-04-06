@@ -1,6 +1,6 @@
 [package]
-name = "kt"
-version = "0.1.0"
+name = "kitchentimer"
+version = "0.0.1"
 authors = ["shy <shy@posteo.de>"]
 edition = "2018"
 

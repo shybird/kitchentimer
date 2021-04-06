@@ -19,7 +19,7 @@ use alarm::{Countdown, AlarmRoster, alarm_exec};
 use layout::{Layout, Position};
 
 
-const NAME: &str = "kt (kitchentime)";
+const NAME: &str = "kitchentimer";
 const VERSION: &str = "0.0.1";
 const USAGE: &str =
 "USAGE: kt [-h|--help] [-v|--version] [-p|--plain] [-e|--exec COMMAND [...]]
