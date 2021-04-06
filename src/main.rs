@@ -22,7 +22,9 @@ use layout::{Layout, Position};
 const NAME: &str = "kitchentimer";
 const VERSION: &str = "0.0.1";
 const USAGE: &str =
-"USAGE: kt [-h|--help] [-v|--version] [-p|--plain] [-e|--exec COMMAND [...]]
+"USAGE: kitchentimer [-h|-v] [-p|--plain] [-e|--exec COMMAND [...]]
+  -h, --help            Display this help.
+  -v, --version         Display version information.
   -p, --plain           Use simpler block chars.
   -e, --exec [COMMAND]  Execute \"COMMAND\" on alarm. Must be the last flag on
                         the command line. Everything after it is passed as
@@ -296,7 +298,7 @@ fn main() {
 }
 
 fn usage() {
-    println!("{}\n{}", NAME, USAGE);
+    println!("{}", USAGE);
     std::process::exit(0);
 }
 
@@ -308,7 +310,7 @@ fn parse_args(config: &mut Config) {
             "-v" | "--version" => {
                 println!("{} {}", NAME, VERSION);
                 std::process::exit(0);
-            }
+            },
             "-p" | "--plain" => { config.plain = true; },
             "-e" | "--exec" => {
                 // Find position of this flag.
@@ -322,8 +324,13 @@ fn parse_args(config: &mut Config) {
                     // Ignore everything after this flag.
                     break;
                 }
-            }
-            _ => usage(), // Unrecognized flag.
+            },
+            unknown => {
+                // Unrecognized flag.
+                println!("Unrecognized parameter: \"{}\"", unknown);
+                println!("Use \"-h\" or \"--help\" for a list of valid command line options");
+                std::process::exit(1);
+            },
         }
     }
 }
