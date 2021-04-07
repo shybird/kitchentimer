@@ -19,10 +19,10 @@ use alarm::{Countdown, AlarmRoster, alarm_exec};
 use layout::{Layout, Position};
 
 
-const NAME: &str = "kitchentimer";
-const VERSION: &str = "0.0.1";
-const USAGE: &str =
-"USAGE: kitchentimer [-h|-v] [-p] [ALARM TIME(s)] [-e|--exec COMMAND [...]]
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const USAGE: &str = concat!("USAGE: ", env!("CARGO_PKG_NAME"),
+" [-h|-v] [-p] [ALARM TIME(s)] [-e|--exec COMMAND [...]]
 PARAMETERS:
   [ALARM TIME]          None or multiple alarm times (HH:MM:SS).
 OPTIONS:
@@ -35,7 +35,7 @@ OPTIONS:
                         with the elapsed time in (HH:)MM:SS format.
 
 SIGNALS: <SIGUSR1> Reset clock.
-         <SIGUSR2> Pause or un-pause clock.";
+         <SIGUSR2> Pause or un-pause clock.");
 const MENUBAR: &str =
 "[0-9] Add alarm  [d] Delete alarm  [SPACE] Pause  [r] Reset  [c] Clear color  [q] Quit";
 const MENUBAR_SHORT: &str =
