@@ -90,14 +90,18 @@ impl AlarmRoster {
             for sub in buffer.rsplit(':') {
                 if !sub.is_empty() {
                     match sub.parse::<u32>() {
+                        // Valid.
                         Ok(d) if d < 60 && index < 3 => time += d * 60u32.pow(index),
-                        Ok(_) => return Err("Could not parse as time."),
-                        Err(_) => return Err("Could not parse number as <u32>."),
+                        // Passes as u32, but does not fit into time range.
+                        Ok(_) => return Err("Could not parse value as time."),
+                        // Could not parse to u32.
+                        Err(_) => return Err("Could not parse value as integer."),
                     }
                 }
                 index += 1;
             }
         } else {
+            // Parse as seconds only.
             match buffer.parse::<u32>() {
                 Ok(d) => time = d,
                 Err(_) => return Err("Could not parse as <u32>."),
@@ -115,7 +119,7 @@ impl AlarmRoster {
             exceeded: false,
         };
 
-        // Add to list, insert based on alarm time. Filter out double entries.
+        // Add to list, insert based on alarm time. Disallow double entries.
         let mut i = self.list.len();
         if i == 0 {
             self.list.push(alarm);
@@ -134,8 +138,14 @@ impl AlarmRoster {
         Ok(())
     }
 
-    pub fn pop(&mut self) -> Option<Alarm> {
-        self.list.pop()
+    // Remove last alarm.
+    pub fn drop_last(&mut self) -> bool {
+        self.list.pop().is_some()
+    }
+
+    // Check for active alarms.
+    pub fn active(&self) -> bool {
+        self.list.iter().any(|a| !a.exceeded)
     }
 
     // Check for exceeded alarms.

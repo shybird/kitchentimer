@@ -22,17 +22,18 @@ use layout::{Layout, Position};
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const USAGE: &str = concat!("USAGE: ", env!("CARGO_PKG_NAME"),
-" [-h|-v] [-p] [ALARM TIME(s)] [-e|--exec COMMAND [...]]
+" [-h|-v] [-p] [-q] [ALARM TIME(s)] [-e|--exec COMMAND [...]]
 PARAMETERS:
   [ALARM TIME]          None or multiple alarm times (HH:MM:SS).
 OPTIONS:
   -h, --help            Display this help.
   -v, --version         Display version information.
   -p, --plain           Use simpler block chars.
+  -q, --quit            Quit program after last alarm.
   -e, --exec [COMMAND]  Execute COMMAND on alarm. Must be the last flag on
                         the command line. Everything after it is passed as
-                        argument to COMMAND. Every \"%s\" will be replaced
-                        with the elapsed time in (HH:)MM:SS format.
+                        argument to COMMAND. Every \"{}\" will be replaced
+                        by the elapsed time in (HH:)MM:SS format.
 
 SIGNALS: <SIGUSR1> Reset clock.
          <SIGUSR2> Pause or un-pause clock.");
@@ -51,6 +52,7 @@ const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
 
 pub struct Config {
     plain: bool,
+    auto_quit: bool,
     alarm_exec: Option<Vec<String>>,
 }
 
@@ -58,6 +60,7 @@ pub struct Config {
 fn main() {
     let mut config = Config {
         plain: false,
+        auto_quit: false,
         alarm_exec: None,
     };
     let mut alarm_roster = AlarmRoster::new();
@@ -147,7 +150,7 @@ fn main() {
                 },
                 // Delete last alarm on 'd'.
                 Key::Char('d') => {
-                    if alarm_roster.pop().is_some() {
+                    if alarm_roster.drop_last() {
                         // If we remove the last alarm we have to reset "countdown"
                         // manually. It is safe to do it anyway.
                         countdown.reset();
@@ -188,10 +191,8 @@ fn main() {
                 },
                 // Backspace.
                 Key::Backspace => {
-                    // Delete last char in buffer. It makes no difference to us
-                    // if this succeeds of fails.
-                    let _ = buffer.pop();
-                    buffer_updated = true;
+                    // Delete last char in buffer.
+                    if buffer.pop().is_some() { buffer_updated = true };
                 },
                 Key::Char(c) => {
                     if c.is_ascii_digit() {
@@ -248,6 +249,10 @@ fn main() {
                 // Run command if configured.
                 if config.alarm_exec.is_some() {
                     alarm_exec(&config, clock.elapsed);
+                }
+                // Quit if configured.
+                if config.auto_quit && !alarm_roster.active() {
+                    break;
                 }
             }
 
@@ -317,6 +322,7 @@ fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
                 std::process::exit(0);
             },
             "-p" | "--plain" => { config.plain = true; },
+            "-q" | "--quit" => { config.auto_quit = true; },
             "-e" | "--exec" => {
                 // Find position of this flag.
                 let i = env::args().position(|s| { s == "-e" || s == "--exec" }).unwrap();
