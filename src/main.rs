@@ -78,6 +78,8 @@ fn main() {
     let mut buffer = String::new();
     let mut buffer_updated: bool = false;
     let mut countdown = Countdown::new();
+    // Child process of alarm_exec().
+    let mut spawned: Option<std::process::Child> = None;
 
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
@@ -254,7 +256,12 @@ fn main() {
 
                 // Run command if configured.
                 if config.alarm_exec.is_some() {
-                    alarm_exec(&config, clock.elapsed);
+                    if spawned.is_none() {
+                        spawned = alarm_exec(&config, clock.elapsed);
+                    } else {
+                        // The last command is still running.
+                        eprintln!("Not executing command, as its predecessor is still running");
+                    }
                 }
                 // Quit if configured.
                 if config.auto_quit && !alarm_roster.active() {
@@ -295,6 +302,26 @@ fn main() {
                 countdown.draw(&mut stdout);
             }
 
+            // Check any spawned child process.
+            if let Some(ref mut child) = spawned {
+                match child.try_wait() {
+                    // Process exited successfully.
+                    Ok(Some(status)) if status.success() => spawned = None,
+                    // Abnormal exit.
+                    Ok(Some(status)) => {
+                        eprintln!("Spawned process terminated with non-zero exit status. ({})", status);
+                        spawned = None;
+                    },
+                    // Process is still running.
+                    Ok(None) => (),
+                    // Other error.
+                    Err(error) => {
+                        eprintln!("Error executing command. ({})", error);
+                        spawned = None;
+                    },
+                }
+            }
+
             // Reset redraw_all and flush stdout.
             layout.force_redraw = false;
             stdout.flush().unwrap();
@@ -311,6 +338,21 @@ fn main() {
         cursor::Goto(1, 1),
         cursor::Show)
         .unwrap();
+
+    // Reset terminal.
+    drop(stdout);
+    drop(input_keys);
+
+    // Wait for remaining spawned processes to exit.
+    if let Some(ref mut child) = spawned {
+        print!("Waiting for spawned processes (PID {}) to exit ...", child.id());
+        std::io::stdout().flush().unwrap();
+
+        match child.wait() {
+            Ok(status) => println!(" ok ({})", status),
+            Err(error) => println!(" failed ({})", error),
+        }
+    }
 }
 
 fn usage() {

@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::{Command, Stdio, Child};
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use crate::{Clock, Config, Layout, Position};
@@ -267,7 +267,7 @@ impl AlarmRoster {
 }
 
 // Execute the command given on the command line.
-pub fn alarm_exec(config: &Config, elapsed: u32) {
+pub fn alarm_exec(config: &Config, elapsed: u32) -> Option<Child> {
     let mut args: Vec<String> = Vec::new();
     let time: String;
 
@@ -283,14 +283,14 @@ pub fn alarm_exec(config: &Config, elapsed: u32) {
             args.push(s.replace("{}", &time));
         }
 
-        if Command::new(&exec[0])
-            .args(&args[1..])
-            .stdout(Stdio::null())
-            .stdin(Stdio::null())
-            .spawn().is_err() {
-
-            eprintln!("Error: Could not execute command");
+        match Command::new(&exec[0]).args(&args[1..])
+            .stdout(Stdio::null()).stdin(Stdio::null()).spawn() {
+            Ok(child) => return Some(child),
+            Err(error) => {
+                eprintln!("Error: Could not execute command. ({})", error);
+            }
         }
     }
+    None
 }
 
