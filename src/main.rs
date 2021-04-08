@@ -22,18 +22,19 @@ use layout::{Layout, Position};
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const USAGE: &str = concat!("USAGE: ", env!("CARGO_PKG_NAME"),
-" [-h|-v] [-p] [-q] [ALARM TIME(s)] [-e|--exec COMMAND [...]]
+" [-h|-v] [-e|--exec COMMAND] [-p] [-q] [ALARM TIME(s)]
+
 PARAMETERS:
   [ALARM TIME]          None or multiple alarm times (HH:MM:SS).
+
 OPTIONS:
-  -h, --help            Display this help.
-  -v, --version         Display version information.
+  -h, --help            Show this help and exit.
+  -v, --version         Show version information and exit.
+  -e, --exec [COMMAND]  Execute COMMAND on alarm. Every occurrence of {}
+                        will be replaced by the elapsed time in (HH:)MM:SS
+                        format.
   -p, --plain           Use simpler block chars.
   -q, --quit            Quit program after last alarm.
-  -e, --exec [COMMAND]  Execute COMMAND on alarm. Must be the last flag on
-                        the command line. Everything after it is passed as
-                        argument to COMMAND. Every \"{}\" will be replaced
-                        by the elapsed time in (HH:)MM:SS format.
 
 SIGNALS: <SIGUSR1> Reset clock.
          <SIGUSR2> Pause or un-pause clock.");
@@ -314,42 +315,77 @@ fn usage() {
 
 // Parse command line arguments into "config".
 fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
-    for arg in env::args().skip(1) {
-        match arg.as_str() {
-            "-h" | "--help" => usage(),
-            "-v" | "--version" => {
-                println!("{} {}", NAME, VERSION);
-                std::process::exit(0);
-            },
-            "-p" | "--plain" => { config.plain = true; },
-            "-q" | "--quit" => { config.auto_quit = true; },
-            "-e" | "--exec" => {
-                // Find position of this flag.
-                let i = env::args().position(|s| { s == "-e" || s == "--exec" }).unwrap();
-                // Copy everything thereafter.
-                let exec: Vec<String> = env::args().skip(i + 1).collect();
-                if exec.is_empty() {
-                    usage();
-                } else {
-                    config.alarm_exec = Some(exec);
-                    // Ignore everything after this flag.
-                    break;
-                }
-            },
-            any if any.starts_with('-') => {
-                // Unrecognized flag.
-                println!("Unrecognized option: \"{}\"", any);
-                println!("Use \"-h\" or \"--help\" for a list of valid command line options");
-                std::process::exit(1);
-            },
-            any => {
-                if let Err(error) = alarm_roster.add(&String::from(any)) {
-                    println!("Error adding \"{}\" as alarm. ({})", any, error);
+    let mut iter = env::args().skip(1);
+
+    loop {
+        if let Some(arg) = iter.next() {
+            match arg.as_str() {
+                "-h" | "--help" => usage(),
+                "-v" | "--version" => {
+                    println!("{} {}", NAME, VERSION);
+                    std::process::exit(0);
+                },
+                "-p" | "--plain" => config.plain = true,
+                "-q" | "--quit" => config.auto_quit = true,
+                "-e" | "--exec" => {
+                    if let Some(e) = iter.next() {
+                        config.alarm_exec = Some(input_to_exec(&e));
+                    } else {
+                        println!("Missing parameter to \"{}\".", arg);
+                        std::process::exit(1);
+                    }
+                },
+                any if any.starts_with('-') => {
+                    // Unrecognized flag.
+                    println!("Unrecognized option: \"{}\"", any);
+                    println!("Use \"-h\" or \"--help\" for a list of valid command line options");
                     std::process::exit(1);
+                },
+                any => {
+                    // Alarm to add.
+                    if let Err(error) = alarm_roster.add(&String::from(any)) {
+                        println!("Error adding \"{}\" as alarm. ({})", any, error);
+                        std::process::exit(1);
+                    }
+                },
+            }
+        } else { break; } // All command line parameters processed.
+    }
+}
+
+// Parse command line argument to --command into a vector of strings suitable
+// for process::Command::spawn.
+fn input_to_exec(input: &str) -> Vec<String> {
+    let mut exec: Vec<String> = Vec::new();
+    let mut subs: String = String::new();
+    let mut quoted = false;
+    let mut escaped = false;
+
+    for byte in input.chars() {
+        match byte {
+            '\\' if !escaped => {
+                // Next char is escaped.
+                escaped = true;
+                continue;
+            },
+            ' ' if escaped || quoted => { &subs.push(' '); },
+            ' ' => {
+                if !&subs.is_empty() {
+                    exec.push(subs.clone());
+                    &subs.clear();
                 }
+            },
+            '"' | '\'' if !escaped => quoted = !quoted,
+            _ => {
+                if escaped { &subs.push('\\'); }
+                &subs.push(byte);
             },
         }
+        escaped = false;
     }
+    exec.push(subs.clone());
+
+    exec
 }
 
 fn register_signal_handlers(signal: &Arc<AtomicUsize>, layout: &Layout) {

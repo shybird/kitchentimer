@@ -108,7 +108,7 @@ impl Layout {
 
         // Days (based on position of seconds).
         self.clock_days = Position {
-            line: self.clock_sec.line + DIGIT_HEIGHT + 1,
+            line: self.clock_sec.line + DIGIT_HEIGHT,
             col: self.clock_sec.col,
         };
 

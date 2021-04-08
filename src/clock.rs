@@ -101,7 +101,7 @@ impl Clock {
                 let day_count = format!(
                     "+ {} {}",
                     self.days,
-                    if self.days == 1 { "day" } else { "days" });
+                    if self.days == 1 { "DAY" } else { "DAYS" });
 
                 write!(stdout,
                     "{}{:>11}",

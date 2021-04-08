@@ -279,9 +279,9 @@ pub fn alarm_exec(config: &Config, elapsed: u32) {
     }
 
     if let Some(exec) = &config.alarm_exec {
-        // Replace every occurrence of "%s".
+        // Replace every occurrence of "{}".
         for s in exec {
-            args.push(s.replace("%s", &time));
+            args.push(s.replace("{}", &time));
         }
 
         if Command::new(&exec[0])
