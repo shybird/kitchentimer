@@ -69,10 +69,10 @@ impl Layout {
     // Compute the position of various elements based on the size of the
     // terminal.
     fn compute(&mut self, display_hours: bool) {
-        let middle: u16 = self.height / 2 - 1;
-
-        // Prevent integer overflow on very low screen sizes.
+        // Prevent integer overflow at very low screen sizes.
         if self.width < MIN_WIDTH || self.height < MIN_HEIGHT { return; }
+
+        let middle: u16 = self.height / 2 - 1;
 
         if display_hours {
             // Seconds digits.
