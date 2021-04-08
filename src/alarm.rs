@@ -1,6 +1,5 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::atomic::Ordering;
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use crate::{Clock, Config, Layout, Position};
@@ -207,7 +206,6 @@ impl AlarmRoster {
 
     // Draw alarm roster according to layout.
     pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>, layout: &mut Layout) {
-        let mut width: u16 = 0;
         let mut index = 0;
 
         // Find first item to print in case we lack space to print them all.
@@ -247,16 +245,17 @@ impl AlarmRoster {
                     .unwrap();
             }
             index += 1;
-            // Calculate roster width. Actual display width is 3 chars wider.
-            if 3 + alarm.display.len() as u16 > width {
-                width = 3 + alarm.display.len() as u16;
-            }
         }
-        // Update layout information.
-        if layout.roster_width != width {
-            layout.roster_width = width;
-            layout.force_recalc.store(true, Ordering::Relaxed);
+    }
+
+    // Return width of roster.
+    pub fn width(&self) -> u16 {
+        let mut width: u16 = 0;
+        for alarm in &self.list {
+            if alarm.display.len() as u16 > width { width = alarm.display.len() as u16; }
         }
+        // Actual width is 3 columns wider if it's not 0.
+        if width == 0 { 0 } else { width.saturating_add(3) }
     }
 
     // Reset every alarm.

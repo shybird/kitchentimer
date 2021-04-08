@@ -79,6 +79,9 @@ fn main() {
     let mut buffer_updated: bool = false;
     let mut countdown = Countdown::new();
 
+    // Initialise roster_width.
+    layout.set_roster_width(alarm_roster.width());
+
     // Register signal handlers.
     let signal = Arc::new(AtomicUsize::new(0));
     register_signal_handlers(&signal, &layout);
@@ -154,6 +157,7 @@ fn main() {
                     if alarm_roster.drop_last() {
                         // If we remove the last alarm we have to reset "countdown"
                         // manually. It is safe to do it anyway.
+                        layout.set_roster_width(alarm_roster.width());
                         countdown.reset();
                         layout.force_redraw = true;
                     }
@@ -180,6 +184,7 @@ fn main() {
                             error_msg(&mut stdout, &layout, e);
                         } else {
                             // Input buffer processed without error.
+                            layout.set_roster_width(alarm_roster.width());
                             layout.force_redraw = true;
                         }
                         buffer.clear();

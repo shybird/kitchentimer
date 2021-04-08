@@ -127,5 +127,12 @@ impl Layout {
             col: 12,
         };
     }
+
+    pub fn set_roster_width(&mut self, width: u16) {
+        if self.width != width {
+            self.roster_width = width;
+            self.force_recalc.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
