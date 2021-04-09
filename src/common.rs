@@ -1,4 +1,17 @@
+use unicode_segmentation::UnicodeSegmentation;
 use termion::color;
+
+
+pub struct Config {
+    pub plain: bool,
+    pub quit: bool,
+    pub command: Option<Vec<String>>,
+}
+
+pub fn str_length(input: &str) -> u16 {
+    let length = UnicodeSegmentation::graphemes(input, true).count();
+    length as u16
+}
 
 pub const COLOR: [&dyn color::Color; 6] = [
     &color::Cyan,

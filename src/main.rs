@@ -1,5 +1,6 @@
 extern crate termion;
 extern crate signal_hook;
+extern crate unicode_segmentation;
 mod alarm;
 mod clock;
 mod common;
@@ -19,6 +20,7 @@ use termion::input::TermRead;
 use clock::Clock;
 use alarm::{Countdown, AlarmRoster, exec_command};
 use layout::{Layout, Position};
+use common::{Config, str_length};
 
 
 const NAME: &str = env!("CARGO_PKG_NAME");
@@ -44,6 +46,8 @@ const MENUBAR: &str =
 "[0-9] Add alarm  [d] Delete alarm  [SPACE] Pause  [r] Reset  [c] Clear color  [q] Quit";
 const MENUBAR_SHORT: &str =
 "[0-9] Add  [d] Delete  [SPACE] Pause  [r] Reset  [c] Clear  [q] Quit";
+const MENUBAR_INS: &str =
+"Format: HH:MM:SS/LABEL  [ENTER] Accept  [ESC] Cancel  [CTR-C] Quit";
 // Needed for signal_hook.
 const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
 const SIGWINCH: usize = signal_hook::consts::SIGWINCH as usize;
@@ -52,12 +56,6 @@ const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
 const SIGINT: usize = signal_hook::consts::SIGINT as usize;
 const SIGUSR1: usize = signal_hook::consts::SIGUSR1 as usize;
 const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
-
-pub struct Config {
-    plain: bool,
-    quit: bool,
-    command: Option<Vec<String>>,
-}
 
 
 fn main() {
@@ -78,8 +76,11 @@ fn main() {
     let mut layout = Layout::new(&config);
     let mut clock = Clock::new();
     let mut buffer = String::new();
-    let mut buffer_updated: bool = false;
+    let mut buffer_updated = false;
     let mut countdown = Countdown::new();
+    // True if in insert mode.
+    let mut insert_mode = false;
+    let mut update_menu = true;
     // Child process of exec_command().
     let mut spawned: Option<std::process::Child> = None;
 
@@ -140,6 +141,47 @@ fn main() {
         // Process input.
         if let Some(key) = input_keys.next() {
             match key.expect("Error reading input") {
+                // Enter.
+                Key::Char('\n') => {
+                    if !buffer.is_empty() {
+                        if let Err(e) = alarm_roster.add(&buffer) {
+                            // Error while processing input buffer.
+                            error_msg(&mut stdout, &layout, e);
+                        } else {
+                            // Input buffer processed without error.
+                            layout.set_roster_width(alarm_roster.width());
+                            layout.force_redraw = true;
+                        }
+                        buffer.clear();
+                        insert_mode = false;
+                        update_menu = true;
+                    }
+                },
+                // Escape ^W, and ^U clear input buffer.
+                Key::Esc | Key::Ctrl('w') | Key::Ctrl('u') => {
+                    buffer.clear();
+                    insert_mode = false;
+                    update_menu = true;
+                    layout.force_redraw = true;
+                    buffer_updated = true;
+                },
+                // Backspace.
+                Key::Backspace => {
+                    // Delete last char in buffer.
+                    if buffer.pop().is_some() {
+                        if buffer.is_empty() {
+                            insert_mode = false;
+                            update_menu = true;
+                            layout.force_redraw = true;
+                        }
+                    }
+                    buffer_updated = true;
+                },
+                // Forward every char if in insert mode.
+                Key::Char(c) if insert_mode => {
+                    buffer.push(c);
+                    buffer_updated = true;
+                },
                 // Reset clock on 'r'.
                 Key::Char('r') => {
                     clock.reset();
@@ -180,33 +222,12 @@ fn main() {
                     // Jump to the start of the main loop.
                     continue;
                 },
-                // Enter.
-                Key::Char('\n') => {
-                    if !buffer.is_empty() {
-                        if let Err(e) = alarm_roster.add(&buffer) {
-                            // Error while processing input buffer.
-                            error_msg(&mut stdout, &layout, e);
-                        } else {
-                            // Input buffer processed without error.
-                            layout.set_roster_width(alarm_roster.width());
-                            layout.force_redraw = true;
-                        }
-                        buffer.clear();
-                    }
-                },
-                // Escape ^W, and ^U clear input buffer.
-                Key::Esc | Key::Ctrl('w') | Key::Ctrl('u') => {
-                    buffer.clear();
-                    buffer_updated = true;
-                },
-                // Backspace.
-                Key::Backspace => {
-                    // Delete last char in buffer.
-                    if buffer.pop().is_some() { buffer_updated = true };
-                },
                 Key::Char(c) => {
                     if c.is_ascii_digit() {
                         buffer.push(c);
+                        insert_mode = true;
+                        update_menu = true;
+                        layout.force_redraw = true;
                         buffer_updated = true;
                     } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
@@ -220,7 +241,7 @@ fn main() {
 
         // Update input buffer display.
         if buffer_updated {
-            draw_buffer(&mut stdout, &layout, &buffer);
+            draw_buffer(&mut stdout, &mut layout, &buffer);
             buffer_updated = false;
             stdout.flush().unwrap();
         }
@@ -274,27 +295,34 @@ fn main() {
             // Clear the window and redraw menu bar, alarm roster and buffer if
             // requested.
             if layout.force_redraw {
-                write!(stdout,
-                    "{}{}{}{}{}",
-                    clear::All,
-                    cursor::Goto(1, 1),
-                    style::Faint,
-                    // Use a compressed version of the menu bar if necessary.
-                    if layout.width >= MENUBAR.len() as u16 {
-                        MENUBAR
-                    } else if layout.width >= MENUBAR_SHORT.len() as u16 {
-                        MENUBAR_SHORT
-                    } else {
-                        ""
-                    },
-                    style::Reset,)
-                    .unwrap();
+                write!(stdout, "{}", clear::All).unwrap();
 
                 // Redraw list of alarms.
                 alarm_roster.draw(&mut stdout, &mut layout);
 
                 // Redraw buffer.
-                draw_buffer(&mut stdout, &layout, &buffer);
+                draw_buffer(&mut stdout, &mut layout, &buffer);
+
+                // Schedule menu redraw.
+                update_menu = true;
+            }
+
+            if update_menu {
+                update_menu = false;
+                write!(stdout,
+                    "{}{}{}{}",
+                    cursor::Goto(1, 1),
+                    style::Faint,
+                    // Switch menu bars. Use a compressed version or none at
+                    // all if necessary.
+                    match insert_mode {
+                        true if layout.can_hold(MENUBAR_INS) => MENUBAR_INS,
+                        false if layout.can_hold(MENUBAR) => MENUBAR,
+                        false if layout.can_hold(MENUBAR_SHORT) => MENUBAR_SHORT,
+                        _ => "",
+                    },
+                    style::Reset,)
+                    .unwrap();
             }
 
             clock.draw(&mut stdout, &layout);
@@ -302,6 +330,15 @@ fn main() {
             // Display countdown.
             if countdown.value > 0 {
                 countdown.draw(&mut stdout);
+            }
+
+            // Move cursor to buffer position.
+            if insert_mode {
+                write!(
+                    stdout,
+                    "{}",
+                    cursor::Goto(layout.cursor.col, layout.cursor.line))
+                    .unwrap();
             }
 
             // Check any spawned child process.
@@ -493,22 +530,25 @@ fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
 // Draw input buffer.
 fn draw_buffer<W: Write>(
     stdout: &mut RawTerminal<W>,
-    layout: &Layout,
+    layout: &mut Layout,
     buffer: &String,
 ) {
     if !buffer.is_empty() {
         write!(stdout,
-            "{}{}Add alarm: {}",
+            "{}{}Add alarm: {}{}",
             cursor::Goto(layout.buffer.col, layout.buffer.line),
             clear::CurrentLine,
+            cursor::Show,
             buffer)
             .unwrap();
+        layout.cursor.col = layout.buffer.col + 11 + str_length(buffer);
     } else {
         // Clear buffer display.
         write!(stdout,
-            "{}{}",
+            "{}{}{}",
             cursor::Goto(layout.buffer.col, layout.buffer.line),
-            clear::CurrentLine)
+            clear::CurrentLine,
+            cursor::Hide)
             .unwrap();
     }
 }
@@ -516,11 +556,12 @@ fn draw_buffer<W: Write>(
 // Draw error message.
 fn error_msg<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, msg: &str) {
     write!(stdout,
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         cursor::Goto(layout.error.col, layout.error.line),
         color::Fg(color::LightRed),
         msg,
-        color::Fg(color::Reset))
+        color::Fg(color::Reset),
+        cursor::Hide)
         .unwrap();
 }
 

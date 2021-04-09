@@ -2,8 +2,8 @@ use std::io::Write;
 use std::process::{Command, Stdio, Child};
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
-use crate::{Clock, Config, Layout, Position};
-use crate::common::COLOR;
+use crate::{Clock, Layout, Position};
+use crate::common::{COLOR, Config, str_length};
 
 
 pub struct Countdown {
@@ -55,7 +55,7 @@ impl Countdown {
 
 pub struct Alarm {
     time: u32,
-    display: String,
+    label: String,
     color_index: usize,
     exceeded: bool,
 }
@@ -78,15 +78,25 @@ impl AlarmRoster {
     }
 
     // Parse string and add as alarm.
-    pub fn add(&mut self, buffer: &String)
-        -> Result<(), &str> {
-
+    pub fn add(&mut self, input: &String) -> Result<(), &str> {
         let mut index = 0;
         let mut time: u32 = 0;
+        let mut label: String;
+        let time_str: &str;
+
+        if let Some(i) = input.find('/') {
+            label = input[(i + 1)..].trim().to_string();
+            // TODO: Make decision yes/no.
+            //label.truncate(24);
+            time_str = &input[..i].trim();
+        } else {
+            label = input.clone();
+            time_str = &input.trim();
+        }
 
         // Parse input into seconds.
-        if buffer.find(':').is_some() {
-            for sub in buffer.rsplit(':') {
+        if time_str.contains(':') {
+            for sub in time_str.rsplit(':') {
                 if !sub.is_empty() {
                     match sub.parse::<u32>() {
                         // Valid.
@@ -101,9 +111,9 @@ impl AlarmRoster {
             }
         } else {
             // Parse as seconds only.
-            match buffer.parse::<u32>() {
+            match time_str.parse::<u32>() {
                 Ok(d) => time = d,
-                Err(_) => return Err("Could not parse as <u32>."),
+                Err(_) => return Err("Could not parse as integer."),
             }
         }
 
@@ -111,11 +121,9 @@ impl AlarmRoster {
         if time == 0 { return Err("Evaluates to zero.") };
         if time >= 24 * 60 * 60 { return Err("Values >24h not supported.") };
 
-        let mut display = buffer.clone();
-        display.shrink_to_fit();
-
+        label.shrink_to_fit();
         let alarm = Alarm {
-            display,
+            label,
             time,
             color_index: (self.list.len() % COLOR.len()),
             exceeded: false,
@@ -181,7 +189,7 @@ impl AlarmRoster {
                     let mut col =
                         layout.roster.col
                         + 3
-                        + alarm.display.len() as u16;
+                        + str_length(&alarm.label);
                     let mut line = layout.roster.line + index;
 
                     // Compensate for "hidden" items in the alarm roster.
@@ -240,7 +248,7 @@ impl AlarmRoster {
                     color::Bg(COLOR[alarm.color_index]),
                     color::Bg(color::Reset),
                     style::Bold,
-                    alarm.display,
+                    alarm.label,
                     style::Reset)
                     .unwrap();
             } else {
@@ -249,7 +257,7 @@ impl AlarmRoster {
                     cursor::Goto(layout.roster.col, layout.roster.line + index),
                     color::Bg(COLOR[alarm.color_index]),
                     color::Bg(color::Reset),
-                    alarm.display)
+                    alarm.label)
                     .unwrap();
             }
             index += 1;
@@ -260,7 +268,8 @@ impl AlarmRoster {
     pub fn width(&self) -> u16 {
         let mut width: u16 = 0;
         for alarm in &self.list {
-            if alarm.display.len() as u16 > width { width = alarm.display.len() as u16; }
+            let length = str_length(&alarm.label);
+            if length > width { width = length };
         }
         // Actual width is 3 columns wider if it's not 0.
         if width == 0 { 0 } else { width.saturating_add(3) }

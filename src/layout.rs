@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::Config;
 use crate::common::*;
 
 // If screen size falls below these values we skip computation of new
@@ -30,6 +29,7 @@ pub struct Layout {
     pub roster_height: u16,
     pub buffer: Position,
     pub error: Position,
+    pub cursor: Position,
 }
 
 impl Layout {
@@ -52,6 +52,7 @@ impl Layout {
             roster_height: 0,
             buffer: Position {col: 0, line: 0},
             error: Position {col: 0, line: 0},
+            cursor: Position {col: 1, line: 1},
         }
     }
 
@@ -78,6 +79,11 @@ impl Layout {
         self.height = height;
         self.roster_width = roster_width;
         self.compute(hours);
+    }
+
+    pub fn can_hold(&self, other: &str) -> bool {
+        // Only valid for ascii strings.
+        self.width >= other.len() as u16
     }
 
     // Compute the position of various elements based on the size of the
@@ -140,6 +146,9 @@ impl Layout {
             line: self.height,
             col: 12,
         };
+
+        // Cursor. Column will be set by main loop.
+        self.cursor.line = self.buffer.line;
     }
 
     pub fn set_roster_width(&mut self, width: u16) {
