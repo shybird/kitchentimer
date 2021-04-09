@@ -162,9 +162,9 @@ impl AlarmRoster {
     pub fn check(&mut self,
         clock: &mut Clock,
         layout: &Layout,
-        countdown: &mut Countdown) -> Option<u32> {
+        countdown: &mut Countdown) -> Option<(u32, String)> {
 
-        let mut ret: Option<u32> = None;
+        let mut ret: Option<(u32, String)> = None;
         let mut index = 0;
 
         for alarm in &mut self.list {
@@ -172,7 +172,7 @@ impl AlarmRoster {
             if !alarm.exceeded {
                 if alarm.time <= clock.elapsed {
                     // Found alarm to raise.
-                    ret = Some(alarm.time);
+                    ret = Some((alarm.time, alarm.label.clone()));
                     alarm.exceeded = true;
                     clock.color_index = Some(alarm.color_index);
                     countdown.value = 0;
@@ -284,7 +284,7 @@ impl AlarmRoster {
 }
 
 // Execute the command given on the command line.
-pub fn exec_command(config: &Config, elapsed: u32) -> Option<Child> {
+pub fn exec_command(config: &Config, elapsed: u32, label: String) -> Option<Child> {
     let mut args: Vec<String> = Vec::new();
     let time: String;
 
@@ -298,7 +298,7 @@ pub fn exec_command(config: &Config, elapsed: u32) -> Option<Child> {
         // Replace every occurrence of "{}".
         args.reserve_exact(command.len());
         for s in command {
-            args.push(s.replace("{}", &time));
+            args.push(s.replace("{t}", &time).replace("{l}", &label));
         }
 
         match Command::new(&command[0]).args(&args[1..])

@@ -34,9 +34,9 @@ PARAMETERS:
 OPTIONS:
   -h, --help            Show this help.
   -v, --version         Show version information.
-  -e, --exec [COMMAND]  Execute COMMAND on alarm. Every occurrence of {}
-                        will be replaced by the elapsed time in (HH:)MM:SS
-                        format.
+  -e, --exec [COMMAND]  Execute COMMAND on alarm. Occurrences of {t} will
+                        be replaced by the alarm time in (HH:)MM:SS format.
+                        Occurrences of {l} by alarm label.
   -p, --plain           Use simpler block chars.
   -q, --quit            Quit program after last alarm.
 
@@ -272,7 +272,7 @@ fn main() {
             layout.update(clock.elapsed >= 3600, clock.elapsed == 3600);
 
             // Check for exceeded alarms.
-            if let Some(time) = alarm_roster.check(&mut clock, &layout, &mut countdown) {
+            if let Some((time, label)) = alarm_roster.check(&mut clock, &layout, &mut countdown) {
                 // Write ASCII bell code.
                 write!(stdout, "{}", 0x07 as char).unwrap();
                 layout.force_redraw = true;
@@ -280,7 +280,7 @@ fn main() {
                 // Run command if configured.
                 if config.command.is_some() {
                     if spawned.is_none() {
-                        spawned = exec_command(&config, time);
+                        spawned = exec_command(&config, time, label);
                     } else {
                         // The last command is still running.
                         eprintln!("Not executing command, as its predecessor is still running");
