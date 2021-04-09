@@ -86,8 +86,6 @@ impl AlarmRoster {
 
         if let Some(i) = input.find('/') {
             label = input[(i + 1)..].trim().to_string();
-            // TODO: Make decision yes/no.
-            //label.truncate(24);
             time_str = &input[..i].trim();
         } else {
             label = input.clone();
@@ -162,17 +160,19 @@ impl AlarmRoster {
     pub fn check(&mut self,
         clock: &mut Clock,
         layout: &Layout,
-        countdown: &mut Countdown) -> Option<(u32, String)> {
-
-        let mut ret: Option<(u32, String)> = None;
+        countdown: &mut Countdown,
+    ) -> Option<(u32, &String)>
+    {
+        let mut ret = None;
         let mut index = 0;
+        let size = self.list.len() as u16;
 
         for alarm in &mut self.list {
             // Ignore alarms marked exceeded.
             if !alarm.exceeded {
                 if alarm.time <= clock.elapsed {
                     // Found alarm to raise.
-                    ret = Some((alarm.time, alarm.label.clone()));
+                    ret = Some((alarm.time, &alarm.label));
                     alarm.exceeded = true;
                     clock.color_index = Some(alarm.color_index);
                     countdown.value = 0;
@@ -194,9 +194,7 @@ impl AlarmRoster {
 
                     // Compensate for "hidden" items in the alarm roster.
                     // TODO: Make this more elegant and robust.
-                    if let Some(offset) = (self.list.len() as u16)
-                        .checked_sub(layout.roster_height + 1) {
-
+                    if let Some(offset) = size.checked_sub(layout.roster_height + 1) {
                         if index <= offset{
                             // Draw next to placeholder ("[...]").
                             line = layout.roster.line;
@@ -248,7 +246,7 @@ impl AlarmRoster {
                     color::Bg(COLOR[alarm.color_index]),
                     color::Bg(color::Reset),
                     style::Bold,
-                    alarm.label,
+                    &alarm.label,
                     style::Reset)
                     .unwrap();
             } else {
@@ -257,7 +255,7 @@ impl AlarmRoster {
                     cursor::Goto(layout.roster.col, layout.roster.line + index),
                     color::Bg(COLOR[alarm.color_index]),
                     color::Bg(color::Reset),
-                    alarm.label)
+                    &alarm.label)
                     .unwrap();
             }
             index += 1;
@@ -271,8 +269,8 @@ impl AlarmRoster {
             let length = str_length(&alarm.label);
             if length > width { width = length };
         }
-        // Actual width is 3 columns wider if it's not 0.
-        if width == 0 { 0 } else { width.saturating_add(3) }
+        // Actual width is 4 columns wider if it's not 0.
+        if width == 0 { 0 } else { width.saturating_add(4) }
     }
 
     // Reset every alarm.
@@ -284,7 +282,7 @@ impl AlarmRoster {
 }
 
 // Execute the command given on the command line.
-pub fn exec_command(config: &Config, elapsed: u32, label: String) -> Option<Child> {
+pub fn exec_command(config: &Config, elapsed: u32, label: &String) -> Option<Child> {
     let mut args: Vec<String> = Vec::new();
     let time: String;
 

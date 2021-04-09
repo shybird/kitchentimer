@@ -26,10 +26,11 @@ use common::{Config, str_length};
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const USAGE: &str = concat!("USAGE: ", env!("CARGO_PKG_NAME"),
-" [-h|-v] [-e|--exec COMMAND] [-p] [-q] [ALARM TIME(s)]
+" [-h|-v] [-e|--exec COMMAND] [-p] [-q] [ALARM[/LABEL]]
 
 PARAMETERS:
-  [ALARM TIME]          None or multiple alarm times (HH:MM:SS).
+  [ALARM TIME[/LABEL]]  Any number of alarm times (HH:MM:SS) with optional
+                        label.
 
 OPTIONS:
   -h, --help            Show this help.
@@ -280,7 +281,7 @@ fn main() {
                 // Run command if configured.
                 if config.command.is_some() {
                     if spawned.is_none() {
-                        spawned = exec_command(&config, time, label);
+                        spawned = exec_command(&config, time, &label);
                     } else {
                         // The last command is still running.
                         eprintln!("Not executing command, as its predecessor is still running");
@@ -444,7 +445,7 @@ fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
 // for process::Command::new().
 fn parse_to_command(input: &str) -> Vec<String> {
     let mut command: Vec<String> = Vec::new();
-    let mut subs: String = String::new();
+    let mut buffer: String = String::new();
     let mut quoted = false;
     let mut escaped = false;
 
@@ -455,22 +456,22 @@ fn parse_to_command(input: &str) -> Vec<String> {
                 escaped = true;
                 continue;
             },
-            ' ' if escaped || quoted => { &subs.push(' '); },
+            ' ' if escaped || quoted => { &buffer.push(' '); },
             ' ' => {
-                if !&subs.is_empty() {
-                    command.push(subs.clone());
-                    &subs.clear();
+                if !&buffer.is_empty() {
+                    command.push(buffer.clone());
+                    &buffer.clear();
                 }
             },
             '"' | '\'' if !escaped => quoted = !quoted,
             _ => {
-                if escaped { &subs.push('\\'); }
-                &subs.push(byte);
+                if escaped { &buffer.push('\\'); }
+                &buffer.push(byte);
             },
         }
         escaped = false;
     }
-    command.push(subs);
+    command.push(buffer);
     command.shrink_to_fit();
     command
 }
