@@ -79,7 +79,11 @@ impl Clock {
     }
 
     // Draw clock according to layout.
-    pub fn draw<W: Write>(&mut self, mut stdout: &mut RawTerminal<W>, layout: &Layout) {
+    pub fn draw<W: Write>(
+        &mut self,
+        mut stdout: &mut RawTerminal<W>,
+        layout: &Layout,
+    ) {
         // Draw hours if necessary.
         if layout.force_redraw || self.elapsed % 3600 == 0 {
             if self.elapsed >= 3600 {
@@ -139,7 +143,13 @@ impl Clock {
             layout.plain);
     }
 
-    fn draw_digit_pair<W: Write>(&self, stdout: &mut RawTerminal<W>, value: u32, pos: &Position, plain: bool) {
+    fn draw_digit_pair<W: Write>(
+        &self,
+        stdout: &mut RawTerminal<W>,
+        value: u32,
+        pos: &Position,
+        plain: bool,
+    ) {
         if let Some(c) = self.color_index {
             write!(stdout,
                 "{}{}",
@@ -179,8 +189,13 @@ impl Clock {
         }
     }
 
-    fn draw_colon<W: Write>(&self, stdout: &mut RawTerminal<W>, pos: &Position, plain: bool) {
-        let dot: char = if plain {'█'} else {'■'};
+    fn draw_colon<W: Write>(
+        &self,
+        stdout: &mut RawTerminal<W>,
+        pos: &Position,
+        plain: bool,
+    ) {
+        let dot = if plain {'█'} else {'■'};
 
         match self.color_index {
             Some(c) =>  {

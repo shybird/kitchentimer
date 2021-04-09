@@ -66,6 +66,20 @@ impl Layout {
         }
     }
 
+    #[cfg(test)]
+    pub fn test_update(
+        &mut self,
+        hours: bool,
+        width: u16,
+        height: u16,
+        roster_width: u16,
+    ) {
+        self.width = width;
+        self.height = height;
+        self.roster_width = roster_width;
+        self.compute(hours);
+    }
+
     // Compute the position of various elements based on the size of the
     // terminal.
     fn compute(&mut self, display_hours: bool) {

@@ -4,18 +4,20 @@ mod alarm;
 mod clock;
 mod common;
 mod layout;
+#[cfg(test)]
+mod tests;
 
 use std::{time, thread, env};
 use std::io::Write;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use signal_hook::flag;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use signal_hook::{flag, low_level};
 use termion::{clear, color, cursor, style};
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
 use termion::input::TermRead;
 use clock::Clock;
-use alarm::{Countdown, AlarmRoster, alarm_exec};
+use alarm::{Countdown, AlarmRoster, exec_command};
 use layout::{Layout, Position};
 
 
@@ -28,8 +30,8 @@ PARAMETERS:
   [ALARM TIME]          None or multiple alarm times (HH:MM:SS).
 
 OPTIONS:
-  -h, --help            Show this help and exit.
-  -v, --version         Show version information and exit.
+  -h, --help            Show this help.
+  -v, --version         Show version information.
   -e, --exec [COMMAND]  Execute COMMAND on alarm. Every occurrence of {}
                         will be replaced by the elapsed time in (HH:)MM:SS
                         format.
@@ -53,16 +55,16 @@ const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
 
 pub struct Config {
     plain: bool,
-    auto_quit: bool,
-    alarm_exec: Option<Vec<String>>,
+    quit: bool,
+    command: Option<Vec<String>>,
 }
 
 
 fn main() {
     let mut config = Config {
         plain: false,
-        auto_quit: false,
-        alarm_exec: None,
+        quit: false,
+        command: None,
     };
     let mut alarm_roster = AlarmRoster::new();
     parse_args(&mut config, &mut alarm_roster);
@@ -78,7 +80,7 @@ fn main() {
     let mut buffer = String::new();
     let mut buffer_updated: bool = false;
     let mut countdown = Countdown::new();
-    // Child process of alarm_exec().
+    // Child process of exec_command().
     let mut spawned: Option<std::process::Child> = None;
 
     // Initialise roster_width.
@@ -86,7 +88,7 @@ fn main() {
 
     // Register signal handlers.
     let signal = Arc::new(AtomicUsize::new(0));
-    register_signal_handlers(&signal, &layout);
+    register_signal_handlers(&signal, &layout.force_recalc);
     
     // Clear window and hide cursor.
     write!(stdout,
@@ -249,22 +251,22 @@ fn main() {
             layout.update(clock.elapsed >= 3600, clock.elapsed == 3600);
 
             // Check for exceeded alarms.
-            if alarm_roster.check(&mut clock, &layout, &mut countdown) {
+            if let Some(time) = alarm_roster.check(&mut clock, &layout, &mut countdown) {
                 // Write ASCII bell code.
                 write!(stdout, "{}", 0x07 as char).unwrap();
                 layout.force_redraw = true;
 
                 // Run command if configured.
-                if config.alarm_exec.is_some() {
+                if config.command.is_some() {
                     if spawned.is_none() {
-                        spawned = alarm_exec(&config, clock.elapsed);
+                        spawned = exec_command(&config, time);
                     } else {
                         // The last command is still running.
                         eprintln!("Not executing command, as its predecessor is still running");
                     }
                 }
                 // Quit if configured.
-                if config.auto_quit && !alarm_roster.active() {
+                if config.quit && !alarm_roster.active() {
                     break;
                 }
             }
@@ -355,6 +357,7 @@ fn main() {
     }
 }
 
+// Print usage information and exit.
 fn usage() {
     println!("{}", USAGE);
     std::process::exit(0);
@@ -373,10 +376,10 @@ fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
                     std::process::exit(0);
                 },
                 "-p" | "--plain" => config.plain = true,
-                "-q" | "--quit" => config.auto_quit = true,
+                "-q" | "--quit" => config.quit = true,
                 "-e" | "--exec" => {
                     if let Some(e) = iter.next() {
-                        config.alarm_exec = Some(input_to_exec(&e));
+                        config.command = Some(parse_to_command(&e));
                     } else {
                         println!("Missing parameter to \"{}\".", arg);
                         std::process::exit(1);
@@ -401,9 +404,9 @@ fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
 }
 
 // Parse command line argument to --command into a vector of strings suitable
-// for process::Command::spawn.
-fn input_to_exec(input: &str) -> Vec<String> {
-    let mut exec: Vec<String> = Vec::new();
+// for process::Command::new().
+fn parse_to_command(input: &str) -> Vec<String> {
+    let mut command: Vec<String> = Vec::new();
     let mut subs: String = String::new();
     let mut quoted = false;
     let mut escaped = false;
@@ -418,7 +421,7 @@ fn input_to_exec(input: &str) -> Vec<String> {
             ' ' if escaped || quoted => { &subs.push(' '); },
             ' ' => {
                 if !&subs.is_empty() {
-                    exec.push(subs.clone());
+                    command.push(subs.clone());
                     &subs.clear();
                 }
             },
@@ -430,25 +433,26 @@ fn input_to_exec(input: &str) -> Vec<String> {
         }
         escaped = false;
     }
-    exec.push(subs.clone());
-
-    exec
+    command.push(subs);
+    command.shrink_to_fit();
+    command
 }
 
-fn register_signal_handlers(signal: &Arc<AtomicUsize>, layout: &Layout) {
-
+fn register_signal_handlers(
+    signal: &Arc<AtomicUsize>,
+    recalc_flag: &Arc<AtomicBool>,
+) {
     flag::register_usize(SIGTSTP as i32, Arc::clone(&signal), SIGTSTP).unwrap();
     flag::register_usize(SIGCONT as i32, Arc::clone(&signal), SIGCONT).unwrap();
     flag::register_usize(SIGTERM as i32, Arc::clone(&signal), SIGTERM).unwrap();
     flag::register_usize(SIGINT as i32, Arc::clone(&signal), SIGINT).unwrap();
     flag::register_usize(SIGUSR1 as i32, Arc::clone(&signal), SIGUSR1).unwrap();
     flag::register_usize(SIGUSR2 as i32, Arc::clone(&signal), SIGUSR2).unwrap();
-
     // SIGWINCH sets "force_recalc" directly.
-    flag::register(SIGWINCH as i32, Arc::clone(&layout.force_recalc)).unwrap();
+    flag::register(SIGWINCH as i32, Arc::clone(&recalc_flag)).unwrap();
 }
 
-// Suspend execution on SIGTSTP.
+// Prepare to suspend execution. Called on SIGTSTP.
 fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>) {
     write!(stdout,
         "{}{}{}",
@@ -462,7 +466,7 @@ fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>) {
             eprintln!("Failed to leave raw terminal mode prior to suspend: {}", error);
         });
 
-    if let Err(error) = signal_hook::low_level::emulate_default_handler(SIGTSTP as i32) {
+    if let Err(error) = low_level::emulate_default_handler(SIGTSTP as i32) {
         eprintln!("Error raising SIGTSTP: {}", error);
     }
 
@@ -487,7 +491,11 @@ fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
 }
 
 // Draw input buffer.
-fn draw_buffer<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, buffer: &String) {
+fn draw_buffer<W: Write>(
+    stdout: &mut RawTerminal<W>,
+    layout: &Layout,
+    buffer: &String,
+) {
     if !buffer.is_empty() {
         write!(stdout,
             "{}{}Add alarm: {}",
@@ -505,8 +513,8 @@ fn draw_buffer<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, buffer: &
     }
 }
 
-// Print error message.
-fn error_msg<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, msg: &'static str) {
+// Draw error message.
+fn error_msg<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, msg: &str) {
     write!(stdout,
         "{}{}{}{}",
         cursor::Goto(layout.error.col, layout.error.line),

@@ -79,7 +79,7 @@ impl AlarmRoster {
 
     // Parse string and add as alarm.
     pub fn add(&mut self, buffer: &String)
-        -> Result<(), &'static str> {
+        -> Result<(), &str> {
 
         let mut index = 0;
         let mut time: u32 = 0;
@@ -111,8 +111,11 @@ impl AlarmRoster {
         if time == 0 { return Err("Evaluates to zero.") };
         if time >= 24 * 60 * 60 { return Err("Values >24h not supported.") };
 
+        let mut display = buffer.clone();
+        display.shrink_to_fit();
+
         let alarm = Alarm {
-            display: buffer.clone(),
+            display,
             time,
             color_index: (self.list.len() % COLOR.len()),
             exceeded: false,
@@ -151,9 +154,9 @@ impl AlarmRoster {
     pub fn check(&mut self,
         clock: &mut Clock,
         layout: &Layout,
-        countdown: &mut Countdown) -> bool {
+        countdown: &mut Countdown) -> Option<u32> {
 
-        let mut hit = false;
+        let mut ret: Option<u32> = None;
         let mut index = 0;
 
         for alarm in &mut self.list {
@@ -161,7 +164,7 @@ impl AlarmRoster {
             if !alarm.exceeded {
                 if alarm.time <= clock.elapsed {
                     // Found alarm to raise.
-                    hit = true;
+                    ret = Some(alarm.time);
                     alarm.exceeded = true;
                     clock.color_index = Some(alarm.color_index);
                     countdown.value = 0;
@@ -191,7 +194,8 @@ impl AlarmRoster {
                             line = layout.roster.line;
                             col = layout.roster.col + 6;
                         } else {
-                            line = line.checked_sub(offset).unwrap_or(layout.roster.line);
+                            line = line.checked_sub(offset)
+                                .unwrap_or(layout.roster.line);
                         }
                     }
                     countdown.position = Some(Position { col, line, });
@@ -201,11 +205,15 @@ impl AlarmRoster {
             }
             index += 1;
         }
-        hit // Return value.
+        ret // Return value.
     }
 
     // Draw alarm roster according to layout.
-    pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>, layout: &mut Layout) {
+    pub fn draw<W: Write>(
+        &self,
+        stdout: &mut RawTerminal<W>,
+        layout: &mut Layout
+    ) {
         let mut index = 0;
 
         // Find first item to print in case we lack space to print them all.
@@ -267,7 +275,7 @@ impl AlarmRoster {
 }
 
 // Execute the command given on the command line.
-pub fn alarm_exec(config: &Config, elapsed: u32) -> Option<Child> {
+pub fn exec_command(config: &Config, elapsed: u32) -> Option<Child> {
     let mut args: Vec<String> = Vec::new();
     let time: String;
 
@@ -277,13 +285,14 @@ pub fn alarm_exec(config: &Config, elapsed: u32) -> Option<Child> {
         time = format!("{:02}:{:02}:{:02}", elapsed /3600, (elapsed / 60) % 60, elapsed % 60);
     }
 
-    if let Some(exec) = &config.alarm_exec {
+    if let Some(command) = &config.command {
         // Replace every occurrence of "{}".
-        for s in exec {
+        args.reserve_exact(command.len());
+        for s in command {
             args.push(s.replace("{}", &time));
         }
 
-        match Command::new(&exec[0]).args(&args[1..])
+        match Command::new(&command[0]).args(&args[1..])
             .stdout(Stdio::null()).stdin(Stdio::null()).spawn() {
             Ok(child) => return Some(child),
             Err(error) => {
