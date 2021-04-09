@@ -20,7 +20,7 @@ use termion::input::TermRead;
 use clock::Clock;
 use alarm::{Countdown, AlarmRoster, exec_command};
 use layout::{Layout, Position};
-use common::{Config, str_length};
+use common::{Config, unicode_length};
 
 
 const NAME: &str = env!("CARGO_PKG_NAME");
@@ -542,7 +542,7 @@ fn draw_buffer<W: Write>(
             cursor::Show,
             buffer)
             .unwrap();
-        layout.cursor.col = layout.buffer.col + 11 + str_length(buffer);
+        layout.cursor.col = layout.buffer.col + 11 + unicode_length(buffer);
     } else {
         // Clear buffer display.
         write!(stdout,

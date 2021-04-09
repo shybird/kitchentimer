@@ -3,7 +3,8 @@ use std::process::{Command, Stdio, Child};
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use crate::{Clock, Layout, Position};
-use crate::common::{COLOR, Config, str_length};
+use crate::common::{COLOR, LABEL_SIZE_LIMIT};
+use crate::common::{Config, unicode_length, unicode_truncate};
 
 
 pub struct Countdown {
@@ -86,6 +87,8 @@ impl AlarmRoster {
 
         if let Some(i) = input.find('/') {
             label = input[(i + 1)..].trim().to_string();
+            // Truncate label.
+            unicode_truncate(&mut label, LABEL_SIZE_LIMIT);
             time_str = &input[..i].trim();
         } else {
             label = input.clone();
@@ -189,7 +192,7 @@ impl AlarmRoster {
                     let mut col =
                         layout.roster.col
                         + 3
-                        + str_length(&alarm.label);
+                        + unicode_length(&alarm.label);
                     let mut line = layout.roster.line + index;
 
                     // Compensate for "hidden" items in the alarm roster.
@@ -266,7 +269,7 @@ impl AlarmRoster {
     pub fn width(&self) -> u16 {
         let mut width: u16 = 0;
         for alarm in &self.list {
-            let length = str_length(&alarm.label);
+            let length = unicode_length(&alarm.label);
             if length > width { width = length };
         }
         // Actual width is 4 columns wider if it's not 0.

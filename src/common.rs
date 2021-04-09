@@ -8,9 +8,16 @@ pub struct Config {
     pub command: Option<Vec<String>>,
 }
 
-pub fn str_length(input: &str) -> u16 {
+pub fn unicode_length(input: &str) -> u16 {
     let length = UnicodeSegmentation::graphemes(input, true).count();
     length as u16
+}
+
+pub fn unicode_truncate(input: &mut String, limit: usize) {
+    match UnicodeSegmentation::grapheme_indices(input.as_str(), true).nth(limit) {
+        Some((i, _)) => input.truncate(i),
+        None => (),
+    }
 }
 
 pub const COLOR: [&dyn color::Color; 6] = [
@@ -21,6 +28,8 @@ pub const COLOR: [&dyn color::Color; 6] = [
     &color::Blue,
     &color::Red,
 ];
+// Maximum length of labels.
+pub const LABEL_SIZE_LIMIT: usize = 48;
 pub const DIGIT_HEIGHT: u16 = 5;
 pub const DIGIT_WIDTH: u16 = 5;
 pub const DIGITS: [[&str; DIGIT_HEIGHT as usize]; 10] = [
