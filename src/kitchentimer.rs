@@ -1,6 +1,6 @@
 extern crate termion;
 
-use std::{time, thread};
+use std::{process, thread, time};
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -9,6 +9,7 @@ use termion::{clear, color, cursor, style};
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
 use termion::input::TermRead;
+//use termion::cursor::DetectCursorPos;
 use crate::clock::Clock;
 use crate::alarm::{Countdown, AlarmRoster, exec_command};
 use crate::layout::Layout;
@@ -21,27 +22,29 @@ pub fn kitchentimer(
     mut alarm_roster: AlarmRoster,
     signal: Arc<AtomicUsize>,
     sigwinch: Arc<AtomicBool>,
-    spawned: &mut Option<std::process::Child>,
-) -> Result<(), std::io::Error> {
+    spawned: &mut Option<process::Child>,
+) -> Result<(), std::io::Error>
+{
     let mut layout = Layout::new(&config);
     layout.force_recalc = sigwinch;
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
     let mut clock = Clock::new();
     let mut countdown = Countdown::new();
-
     let mut buffer = String::new();
-    let mut input_keys = termion::async_stdin().keys();
 
     // State variables.
     let mut update_buffer = false;
     let mut update_menu = false;
     let mut insert_mode = false;
 
-    let mut stdout = std::io::stdout().into_raw_mode()
+    let async_stdin = termion::async_stdin();
+    let mut input_keys = async_stdin.keys();
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock().into_raw_mode()
         .unwrap_or_else(|error| {
             eprintln!("Error opening stdout: {}", error);
-            std::process::exit(1);
+            process::exit(1);
         });
 
     // Clear window and hide cursor.
@@ -51,7 +54,7 @@ pub fn kitchentimer(
         cursor::Hide)
         .unwrap_or_else(|error| {
             eprintln!("Error writing to stdout: {}", error);
-            std::process::exit(1);
+            process::exit(1);
         });
 
     // Enter main loop.
@@ -190,6 +193,9 @@ pub fn kitchentimer(
                 // Any other key.
                 _ => (),
             }
+        } else {
+            // Main loop delay.
+            thread::sleep(time::Duration::from_millis(200));
         }
 
         // Update input buffer display.
@@ -316,9 +322,6 @@ pub fn kitchentimer(
             layout.force_redraw = false;
             stdout.flush()?;
         }
-
-        // Main loop delay.
-        thread::sleep(time::Duration::from_millis(100));
     }
 
     // Main loop exited. Clear window and restore cursor.
@@ -346,6 +349,9 @@ fn draw_buffer<W: Write>(
             cursor::Show,
             buffer)?;
         layout.cursor.col = layout.buffer.col + 11 + unicode_length(buffer);
+        // TODO: This would be a much better alternative, but panics because
+        // of interference with async_reader.
+        //layout.cursor.col = stdout.cursor_pos()?.0;
     } else {
         // Clear buffer display.
         write!(stdout,
@@ -402,7 +408,7 @@ fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
     stdout.activate_raw_mode()
         .unwrap_or_else(|error| {
             eprintln!("Failed to re-enter raw terminal mode after suspend: {}", error);
-            std::process::exit(1);
+            process::exit(1);
         });
     write!(stdout,
         "{}{}",
@@ -410,7 +416,7 @@ fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) {
         cursor::Hide)
         .unwrap_or_else(|error| {
             eprintln!("Error writing to stdout: {}", error);
-            std::process::exit(1);
+            process::exit(1);
         });
 }
 

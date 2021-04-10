@@ -8,7 +8,7 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-use std::env;
+use std::{env, process};
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
@@ -42,7 +42,7 @@ fn main() {
     let sigwinch = Arc::new(AtomicBool::new(true));
     register_signal_handlers(&signal, &sigwinch);
     // Spawned child process if any.
-    let mut spawned: Option<std::process::Child> = None;
+    let mut spawned: Option<process::Child> = None;
 
     // Runs main loop.
     match kitchentimer(
@@ -53,7 +53,7 @@ fn main() {
         &mut spawned,
     ) {
         Ok(_) => (),
-        Err(e) => eprintln!("Error: {}", e),
+        Err(e) => eprintln!("Main loop exited with error: {}", e),
     }
 
     // Wait for remaining spawned processes to exit.
@@ -71,7 +71,7 @@ fn main() {
 // Print usage information and exit.
 fn usage() {
     println!("{}", USAGE);
-    std::process::exit(0);
+    process::exit(0);
 }
 
 // Parse command line arguments into "config".
@@ -84,7 +84,7 @@ fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
                 "-h" | "--help" => usage(),
                 "-v" | "--version" => {
                     println!("{} {}", NAME, VERSION);
-                    std::process::exit(0);
+                    process::exit(0);
                 },
                 "-p" | "--plain" => config.plain = true,
                 "-q" | "--quit" => config.quit = true,
@@ -93,20 +93,20 @@ fn parse_args(config: &mut Config, alarm_roster: &mut AlarmRoster) {
                         config.command = Some(parse_to_command(&e));
                     } else {
                         println!("Missing parameter to \"{}\".", arg);
-                        std::process::exit(1);
+                        process::exit(1);
                     }
                 },
                 any if any.starts_with('-') => {
                     // Unrecognized flag.
                     println!("Unrecognized option: \"{}\"", any);
                     println!("Use \"-h\" or \"--help\" for a list of valid command line options");
-                    std::process::exit(1);
+                    process::exit(1);
                 },
                 any => {
                     // Alarm to add.
                     if let Err(error) = alarm_roster.add(&String::from(any)) {
                         println!("Error adding \"{}\" as alarm. ({})", any, error);
-                        std::process::exit(1);
+                        process::exit(1);
                     }
                 },
             }
