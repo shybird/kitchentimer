@@ -22,7 +22,7 @@ pub fn kitchentimer(
     signal: Arc<AtomicUsize>,
     sigwinch: Arc<AtomicBool>,
     spawned: &mut Option<std::process::Child>,
-) {
+) -> Result<(), std::io::Error> {
     let mut layout = Layout::new(&config);
     layout.force_recalc = sigwinch;
     // Initialise roster_width.
@@ -62,7 +62,7 @@ pub fn kitchentimer(
             0 => (),
             // Suspend execution on SIGTSTP.
             SIGTSTP => {
-                suspend(&mut stdout);
+                suspend(&mut stdout)?;
                 // Clear SIGCONT, as we have already taken care to reset the
                 // terminal.
                 signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
@@ -99,7 +99,7 @@ pub fn kitchentimer(
                     if !buffer.is_empty() {
                         if let Err(e) = alarm_roster.add(&buffer) {
                             // Error while processing input buffer.
-                            error_msg(&mut stdout, &layout, e);
+                            error_msg(&mut stdout, &layout, e)?;
                         } else {
                             // Input buffer processed without error.
                             layout.set_roster_width(alarm_roster.width());
@@ -167,7 +167,7 @@ pub fn kitchentimer(
                 Key::Ctrl('r') => layout.force_redraw = true,
                 // Suspend an ^Z.
                 Key::Ctrl('z') => {
-                    suspend(&mut stdout);
+                    suspend(&mut stdout)?;
                     // Clear SIGCONT, as we have already taken care to reset
                     // the terminal.
                     signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
@@ -194,9 +194,9 @@ pub fn kitchentimer(
 
         // Update input buffer display.
         if update_buffer {
-            draw_buffer(&mut stdout, &mut layout, &buffer);
+            draw_buffer(&mut stdout, &mut layout, &buffer)?;
             update_buffer = false;
-            stdout.flush().unwrap();
+            stdout.flush()?;
         }
 
         let elapsed = if clock.paused {
@@ -227,7 +227,7 @@ pub fn kitchentimer(
             // Check for exceeded alarms.
             if let Some((time, label)) = alarm_roster.check(&mut clock, &layout, &mut countdown) {
                 // Write ASCII bell code.
-                write!(stdout, "{}", 0x07 as char).unwrap();
+                write!(stdout, "{}", 0x07 as char)?;
                 layout.force_redraw = true;
 
                 // Run command if configured.
@@ -248,13 +248,13 @@ pub fn kitchentimer(
             // Clear the window and redraw menu bar, alarm roster and buffer if
             // requested.
             if layout.force_redraw {
-                write!(stdout, "{}", clear::All).unwrap();
+                write!(stdout, "{}", clear::All)?;
 
                 // Redraw list of alarms.
                 alarm_roster.draw(&mut stdout, &mut layout);
 
                 // Redraw buffer.
-                draw_buffer(&mut stdout, &mut layout, &buffer);
+                draw_buffer(&mut stdout, &mut layout, &buffer)?;
 
                 // Schedule menu redraw.
                 update_menu = true;
@@ -274,8 +274,7 @@ pub fn kitchentimer(
                         false if layout.can_hold(MENUBAR_SHORT) => MENUBAR_SHORT,
                         _ => "",
                     },
-                    style::Reset,)
-                    .unwrap();
+                    style::Reset)?;
             }
 
             clock.draw(&mut stdout, &layout);
@@ -290,8 +289,7 @@ pub fn kitchentimer(
                 write!(
                     stdout,
                     "{}",
-                    cursor::Goto(layout.cursor.col, layout.cursor.line))
-                    .unwrap();
+                    cursor::Goto(layout.cursor.col, layout.cursor.line))?;
             }
 
             // Check any spawned child process.
@@ -316,7 +314,7 @@ pub fn kitchentimer(
 
             // Reset redraw_all and flush stdout.
             layout.force_redraw = false;
-            stdout.flush().unwrap();
+            stdout.flush()?;
         }
 
         // Main loop delay.
@@ -328,8 +326,9 @@ pub fn kitchentimer(
         "{}{}{}",
         clear::BeforeCursor,
         cursor::Goto(1, 1),
-        cursor::Show)
-        .unwrap();
+        cursor::Show)?;
+
+    Ok(())
 }
 
 // Draw input buffer.
@@ -337,15 +336,15 @@ fn draw_buffer<W: Write>(
     stdout: &mut RawTerminal<W>,
     layout: &mut Layout,
     buffer: &String,
-) {
+) -> Result<(), std::io::Error>
+{
     if !buffer.is_empty() {
         write!(stdout,
             "{}{}Add alarm: {}{}",
             cursor::Goto(layout.buffer.col, layout.buffer.line),
             clear::CurrentLine,
             cursor::Show,
-            buffer)
-            .unwrap();
+            buffer)?;
         layout.cursor.col = layout.buffer.col + 11 + unicode_length(buffer);
     } else {
         // Clear buffer display.
@@ -353,32 +352,38 @@ fn draw_buffer<W: Write>(
             "{}{}{}",
             cursor::Goto(layout.buffer.col, layout.buffer.line),
             clear::CurrentLine,
-            cursor::Hide)
-            .unwrap();
+            cursor::Hide)?;
     }
+    Ok(())
 }
 
 // Draw error message at input buffer position.
-fn error_msg<W: Write>(stdout: &mut RawTerminal<W>, layout: &Layout, msg: &str) {
+fn error_msg<W: Write>(
+    stdout: &mut RawTerminal<W>,
+    layout: &Layout,
+    msg: &str
+) -> Result<(), std::io::Error>
+{
     write!(stdout,
         "{}{}{}{}{}",
         cursor::Goto(layout.error.col, layout.error.line),
         color::Fg(color::LightRed),
         msg,
         color::Fg(color::Reset),
-        cursor::Hide)
-        .unwrap();
+        cursor::Hide)?;
+    Ok (())
 }
 
 // Prepare to suspend execution. Called on SIGTSTP.
-fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>) {
+fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>)
+    -> Result<(), std::io::Error>
+{
     write!(stdout,
         "{}{}{}",
         cursor::Goto(1,1),
         clear::All,
-        cursor::Show)
-        .unwrap();
-    stdout.flush().unwrap();
+        cursor::Show)?;
+    stdout.flush()?;
     stdout.suspend_raw_mode()
         .unwrap_or_else(|error| {
             eprintln!("Failed to leave raw terminal mode prior to suspend: {}", error);
@@ -389,6 +394,7 @@ fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>) {
     }
 
     restore_after_suspend(&mut stdout);
+    Ok(())
 }
 
 // Set up terminal after SIGTSTP or SIGSTOP.

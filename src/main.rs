@@ -45,13 +45,16 @@ fn main() {
     let mut spawned: Option<std::process::Child> = None;
 
     // Runs main loop.
-    kitchentimer(
+    match kitchentimer(
         config,
         alarm_roster,
         signal,
         sigwinch,
         &mut spawned,
-    );
+    ) {
+        Ok(_) => (),
+        Err(e) => eprintln!("Error: {}", e),
+    }
 
     // Wait for remaining spawned processes to exit.
     if let Some(ref mut child) = spawned {
