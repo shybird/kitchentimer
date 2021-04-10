@@ -1,33 +1,48 @@
-use unicode_segmentation::UnicodeSegmentation;
-use termion::color;
+pub const NAME: &str = env!("CARGO_PKG_NAME");
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const USAGE: &str = concat!("USAGE: ", env!("CARGO_PKG_NAME"),
+" [-h|-v] [-e|--exec COMMAND] [-p] [-q] [ALARM[/LABEL]]
 
+PARAMETERS:
+  [ALARM TIME[/LABEL]]  Any number of alarm times (HH:MM:SS) with optional
+                        label.
 
-pub struct Config {
-    pub plain: bool,
-    pub quit: bool,
-    pub command: Option<Vec<String>>,
-}
+OPTIONS:
+  -h, --help            Show this help.
+  -v, --version         Show version information.
+  -e, --exec [COMMAND]  Execute COMMAND on alarm. Occurrences of {t} will
+                        be replaced by the alarm time in (HH:)MM:SS format.
+                        Occurrences of {l} by alarm label.
+  -p, --plain           Use simpler block chars.
+  -q, --quit            Quit program after last alarm.
 
-pub fn unicode_length(input: &str) -> u16 {
-    let length = UnicodeSegmentation::graphemes(input, true).count();
-    length as u16
-}
+SIGNALS: <SIGUSR1> Reset clock.
+         <SIGUSR2> Pause or un-pause clock.");
+pub const MENUBAR: &str =
+"[0-9] Add alarm  [d] Delete alarm  [SPACE] Pause  [r] Reset  [c] Clear color  [q] Quit";
+pub const MENUBAR_SHORT: &str =
+"[0-9] Add  [d] Delete  [SPACE] Pause  [r] Reset  [c] Clear  [q] Quit";
+pub const MENUBAR_INS: &str =
+"Format: HH:MM:SS/LABEL  [ENTER] Accept  [ESC] Cancel  [CTR-C] Quit";
 
-pub fn unicode_truncate(input: &mut String, limit: usize) {
-    match UnicodeSegmentation::grapheme_indices(input.as_str(), true).nth(limit) {
-        Some((i, _)) => input.truncate(i),
-        None => (),
-    }
-}
+// Needed for signal_hook.
+pub const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
+pub const SIGWINCH: usize = signal_hook::consts::SIGWINCH as usize;
+pub const SIGCONT: usize = signal_hook::consts::SIGCONT as usize;
+pub const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
+pub const SIGINT: usize = signal_hook::consts::SIGINT as usize;
+pub const SIGUSR1: usize = signal_hook::consts::SIGUSR1 as usize;
+pub const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
 
-pub const COLOR: [&dyn color::Color; 6] = [
-    &color::Cyan,
-    &color::Magenta,
-    &color::Green,
-    &color::Yellow,
-    &color::Blue,
-    &color::Red,
+pub const COLOR: [&dyn termion::color::Color; 6] = [
+    &termion::color::Cyan,
+    &termion::color::Magenta,
+    &termion::color::Green,
+    &termion::color::Yellow,
+    &termion::color::Blue,
+    &termion::color::Red,
 ];
+
 // Maximum length of labels.
 pub const LABEL_SIZE_LIMIT: usize = 48;
 pub const DIGIT_HEIGHT: u16 = 5;

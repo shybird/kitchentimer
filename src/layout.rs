@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::common::*;
+use crate::Config;
+use crate::consts::*;
 
 // If screen size falls below these values we skip computation of new
 // positions.

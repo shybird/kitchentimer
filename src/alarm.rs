@@ -2,9 +2,9 @@ use std::io::Write;
 use std::process::{Command, Stdio, Child};
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
-use crate::{Clock, Layout, Position};
-use crate::common::{COLOR, LABEL_SIZE_LIMIT};
-use crate::common::{Config, unicode_length, unicode_truncate};
+use crate::{Clock, Config, Layout, Position};
+use crate::utils::*;
+use crate::consts::{COLOR, LABEL_SIZE_LIMIT};
 
 
 pub struct Countdown {
@@ -86,7 +86,7 @@ impl AlarmRoster {
         let time_str: &str;
 
         if let Some(i) = input.find('/') {
-            label = input[(i + 1)..].trim().to_string();
+            label = input[(i + 1)..].to_string();
             // Truncate label.
             unicode_truncate(&mut label, LABEL_SIZE_LIMIT);
             time_str = &input[..i].trim();

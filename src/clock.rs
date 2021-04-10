@@ -2,10 +2,9 @@ use std::time;
 use std::io::Write;
 use termion::{color, cursor};
 use termion::raw::RawTerminal;
-use crate::common::*;
+use crate::consts::*;
 use crate::Layout;
 use crate::Position;
-use crate::common::COLOR;
 
 
 pub struct Clock {
