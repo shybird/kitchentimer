@@ -2,7 +2,9 @@ use std::io::Write;
 use std::process::{Command, Stdio, Child};
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
-use crate::{Clock, Config, Layout, Position};
+use crate::Config;
+use crate::clock::Clock;
+use crate::layout::{Layout, Position};
 use crate::utils::*;
 use crate::consts::{COLOR, LABEL_SIZE_LIMIT};
 

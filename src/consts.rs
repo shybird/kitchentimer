@@ -25,15 +25,6 @@ pub const MENUBAR_SHORT: &str =
 pub const MENUBAR_INS: &str =
 "Format: HH:MM:SS/LABEL  [ENTER] Accept  [ESC] Cancel  [CTR-C] Quit";
 
-// Needed for signal_hook.
-pub const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
-pub const SIGWINCH: usize = signal_hook::consts::SIGWINCH as usize;
-pub const SIGCONT: usize = signal_hook::consts::SIGCONT as usize;
-pub const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
-pub const SIGINT: usize = signal_hook::consts::SIGINT as usize;
-pub const SIGUSR1: usize = signal_hook::consts::SIGUSR1 as usize;
-pub const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
-
 pub const COLOR: [&dyn termion::color::Color; 6] = [
     &termion::color::Cyan,
     &termion::color::Magenta,

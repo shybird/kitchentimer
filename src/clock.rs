@@ -3,8 +3,7 @@ use std::io::Write;
 use termion::{color, cursor};
 use termion::raw::RawTerminal;
 use crate::consts::*;
-use crate::Layout;
-use crate::Position;
+use crate::layout::{Layout, Position};
 
 
 pub struct Clock {
