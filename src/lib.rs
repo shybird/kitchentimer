@@ -167,7 +167,10 @@ pub fn run(
                         true if layout.can_hold(MENUBAR_INS) => MENUBAR_INS,
                         false if layout.can_hold(MENUBAR) => MENUBAR,
                         false if layout.can_hold(MENUBAR_SHORT) => MENUBAR_SHORT,
-                        _ => "",
+                        // Clearing the screen from position 1, 1 seems to have
+                        // unwanted side effects. We avoid this by writing a
+                        // single space here.
+                        _ => " ",
                     },
                     clear::AfterCursor,
                     style::NoFaint)?;

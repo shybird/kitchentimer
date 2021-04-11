@@ -82,6 +82,14 @@ impl Clock {
         mut stdout: &mut RawTerminal<W>,
         layout: &Layout,
     ) {
+        // Setup style and color if appropriate.
+        if self.paused {
+            write!(stdout, "{}", style::Faint).unwrap();
+        }
+        if let Some(c) = self.color_index {
+            write!(stdout, "{}", color::Fg(COLOR[c])).unwrap();
+        }
+
         // Draw hours if necessary.
         if layout.force_redraw || self.elapsed % 3600 == 0 {
             if self.elapsed >= 3600 {
@@ -139,6 +147,15 @@ impl Clock {
             self.elapsed % 60,
             &layout.clock_sec,
             layout.plain);
+
+        // Reset color and style.
+        if self.paused || self.color_index != None {
+            write!(stdout,
+                "{}{}",
+                style::NoFaint,
+                color::Fg(color::Reset))
+                .unwrap();
+        }
     }
 
     fn draw_digit_pair<W: Write>(
@@ -148,41 +165,16 @@ impl Clock {
         pos: &Position,
         plain: bool,
     ) {
-        if self.paused {
-            write!(stdout, "{}", style::Faint).unwrap();
-        }
-
-        if let Some(c) = self.color_index {
-            write!(stdout, "{}", color::Fg(COLOR[c])).unwrap();
-        }
+        let digits = if plain { DIGITS_PLAIN } else { DIGITS };
 
         for l in 0..DIGIT_HEIGHT {
-            if plain {
-                write!(stdout,
-                    "{}{} {}",
-                    cursor::Goto(pos.col, pos.line + l),
-                    // First digit.
-                    DIGITS_PLAIN[(value / 10) as usize][l as usize],
-                    // Second digit.
-                    DIGITS_PLAIN[(value % 10) as usize][l as usize])
-                    .unwrap();
-            } else {
-                write!(stdout,
-                    "{}{} {}",
-                    cursor::Goto(pos.col, pos.line + l),
-                    // First digit.
-                    DIGITS[(value / 10) as usize][l as usize],
-                    // Second digit.
-                    DIGITS[(value % 10) as usize][l as usize])
-                    .unwrap();
-            }
-        }
-
-        if self.paused || self.color_index != None {
             write!(stdout,
-                "{}{}",
-                style::NoFaint,
-                color::Fg(color::Reset))
+                "{}{} {}",
+                cursor::Goto(pos.col, pos.line + l),
+                // First digit.
+                digits[(value / 10) as usize][l as usize],
+                // Second digit.
+                digits[(value % 10) as usize][l as usize])
                 .unwrap();
         }
     }
@@ -195,33 +187,13 @@ impl Clock {
     ) {
         let dot = if plain {'█'} else {'■'};
 
-        if self.paused {
-            write!(stdout, "{}", style::Faint).unwrap();
-        }
-
-        if let Some(c) = self.color_index {
-            write!(stdout,
-                "{}{}{}{}{}{}",
-                cursor::Goto(pos.col, pos.line + 1),
-                color::Fg(COLOR[c]),
-                dot,
-                cursor::Goto(pos.col, pos.line + 3),
-                dot,
-                color::Fg(color::Reset))
-                .unwrap();
-        } else {
-            write!(stdout,
-                "{}{}{}{}",
-                cursor::Goto(pos.col, pos.line + 1),
-                dot,
-                cursor::Goto(pos.col, pos.line + 3),
-                dot)
-                .unwrap();
-        }
-
-        if self.paused {
-            write!(stdout, "{}", style::NoFaint).unwrap();
-        }
+        write!(stdout,
+            "{}{}{}{}",
+            cursor::Goto(pos.col, pos.line + 1),
+            dot,
+            cursor::Goto(pos.col, pos.line + 3),
+            dot)
+            .unwrap();
     }
 }
 
