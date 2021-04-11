@@ -1,11 +1,10 @@
 use std::time;
 use std::io::Write;
-use termion::{color, cursor};
+use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use crate::consts::COLOR;
 use crate::consts::digits::*;
 use crate::layout::{Layout, Position};
-
 
 pub struct Clock {
     pub start: time::Instant,
@@ -149,12 +148,12 @@ impl Clock {
         pos: &Position,
         plain: bool,
     ) {
+        if self.paused {
+            write!(stdout, "{}", style::Faint).unwrap();
+        }
+
         if let Some(c) = self.color_index {
-            write!(stdout,
-                "{}{}",
-                cursor::Goto(pos.col, pos.line),
-                color::Fg(COLOR[c]))
-                .unwrap();
+            write!(stdout, "{}", color::Fg(COLOR[c])).unwrap();
         }
 
         for l in 0..DIGIT_HEIGHT {
@@ -179,10 +178,10 @@ impl Clock {
             }
         }
 
-        if self.color_index != None {
+        if self.paused || self.color_index != None {
             write!(stdout,
                 "{}{}",
-                cursor::Goto(pos.col + DIGIT_WIDTH + 1, pos.line + DIGIT_HEIGHT),
+                style::NoFaint,
                 color::Fg(color::Reset))
                 .unwrap();
         }
@@ -196,27 +195,32 @@ impl Clock {
     ) {
         let dot = if plain {'█'} else {'■'};
 
-        match self.color_index {
-            Some(c) =>  {
-                write!(stdout,
-                    "{}{}{}{}{}{}",
-                    cursor::Goto(pos.col, pos.line + 1),
-                    color::Fg(COLOR[c]),
-                    dot,
-                    cursor::Goto(pos.col, pos.line + 3),
-                    dot,
-                    color::Fg(color::Reset))
-                    .unwrap();
-            }
-            None =>  {
-                write!(stdout,
-                    "{}{}{}{}",
-                    cursor::Goto(pos.col, pos.line + 1),
-                    dot,
-                    cursor::Goto(pos.col, pos.line + 3),
-                    dot)
-                    .unwrap();
-            }
+        if self.paused {
+            write!(stdout, "{}", style::Faint).unwrap();
+        }
+
+        if let Some(c) = self.color_index {
+            write!(stdout,
+                "{}{}{}{}{}{}",
+                cursor::Goto(pos.col, pos.line + 1),
+                color::Fg(COLOR[c]),
+                dot,
+                cursor::Goto(pos.col, pos.line + 3),
+                dot,
+                color::Fg(color::Reset))
+                .unwrap();
+        } else {
+            write!(stdout,
+                "{}{}{}{}",
+                cursor::Goto(pos.col, pos.line + 1),
+                dot,
+                cursor::Goto(pos.col, pos.line + 3),
+                dot)
+                .unwrap();
+        }
+
+        if self.paused {
+            write!(stdout, "{}", style::NoFaint).unwrap();
         }
     }
 }

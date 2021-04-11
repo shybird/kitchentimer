@@ -94,12 +94,11 @@ impl Buffer {
         // Write error message if present and return.
         if let Some(msg) = self.message {
             write!(stdout,
-                "{}{}{}{}{}{}",
+                "{}{}{}{}{}{}{}",
                 cursor::Hide,
-                cursor::Goto(
-                    layout.buffer.col + (PROMPT.len() as u16),
-                    layout.buffer.line),
-                clear::UntilNewline,
+                cursor::Goto( layout.buffer.col, layout.buffer.line),
+                clear::CurrentLine,
+                PROMPT,
                 color::Fg(color::LightRed),
                 &msg,
                 color::Fg(color::Reset))?;
@@ -110,7 +109,7 @@ impl Buffer {
             write!(stdout,
                 "{}{}{}{}{}",
                 cursor::Goto(layout.buffer.col, layout.buffer.line),
-                clear::UntilNewline,
+                clear::CurrentLine,
                 PROMPT,
                 cursor::Show,
                 &self.content)?;

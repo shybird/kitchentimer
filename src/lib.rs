@@ -49,9 +49,6 @@ pub fn run(
     let mut countdown = Countdown::new();
     let mut buffer = Buffer::new();
 
-    // State variables.
-    // Request redraw of menu.
-    let mut update_menu = false;
     // Are we in insert mode?
     let mut insert_mode = false;
 
@@ -159,22 +156,9 @@ pub fn run(
             // Clear the window and redraw menu bar, alarm roster and buffer if
             // requested.
             if layout.force_redraw {
-                write!(stdout, "{}", clear::All)?;
-
-                // Redraw list of alarms.
-                alarm_roster.draw(&mut stdout, &mut layout);
-
-                // Redraw buffer.
-                buffer.draw(&mut stdout, &mut layout)?;
-
-                // Schedule menu redraw.
-                update_menu = true;
-            }
-
-            if update_menu {
-                update_menu = false;
+                // Write menu at the top.
                 write!(stdout,
-                    "{}{}{}{}",
+                    "{}{}{}{}{}",
                     cursor::Goto(1, 1),
                     style::Faint,
                     // Switch menu bars. Use a compressed version or none at
@@ -185,7 +169,14 @@ pub fn run(
                         false if layout.can_hold(MENUBAR_SHORT) => MENUBAR_SHORT,
                         _ => "",
                     },
-                    style::Reset)?;
+                    clear::AfterCursor,
+                    style::NoFaint)?;
+
+                // Redraw list of alarms.
+                alarm_roster.draw(&mut stdout, &mut layout);
+
+                // Redraw buffer.
+                buffer.draw(&mut stdout, &mut layout)?;
             }
 
             clock.draw(&mut stdout, &layout);
@@ -221,7 +212,7 @@ pub fn run(
             stdout.flush()?;
         }
 
-        // Update buffer whenever the cursor is visible.
+        // Update buffer whenever the cursor should be visible.
         if insert_mode || buffer.altered {
             buffer.draw(&mut stdout, &mut layout)?;
             stdout.flush()?;
@@ -239,25 +230,22 @@ pub fn run(
                         } else {
                             // Input buffer processed without error.
                             layout.set_roster_width(alarm_roster.width());
-                            layout.force_redraw = true;
                         }
                         buffer.clear();
                         insert_mode = false;
-                        update_menu = true;
+                        layout.force_redraw = true;
                     }
                 },
                 // Escape ^W, and ^U clear input buffer.
                 Key::Esc | Key::Ctrl('u') => {
                     buffer.reset();
                     insert_mode = false;
-                    update_menu = true;
                     layout.force_redraw = true;
                 },
                 // ^W removes last word.
                 Key::Ctrl('w') => {
                     if !buffer.strip_word() {
                         insert_mode = false;
-                        update_menu = true;
                         layout.force_redraw = true;
                     }
                 },
@@ -266,7 +254,6 @@ pub fn run(
                     // Delete last char in buffer.
                     if buffer.strip_char() && buffer.is_empty() {
                         insert_mode = false;
-                        update_menu = true;
                         layout.force_redraw = true;
                     }
                 },
@@ -284,6 +271,7 @@ pub fn run(
                 // (Un-)Pause on space.
                 Key::Char(' ') => {
                     clock.toggle();
+                    layout.force_redraw = true;
                 },
                 // Clear clock color on 'c'.
                 Key::Char('c') => {
@@ -318,7 +306,6 @@ pub fn run(
                     if c.is_ascii_digit() {
                         buffer.push(c);
                         insert_mode = true;
-                        update_menu = true;
                         layout.force_redraw = true;
                     } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
@@ -455,7 +442,7 @@ fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>)
     write!(stdout,
         "{}{}{}",
         cursor::Goto(1,1),
-        clear::All,
+        clear::AfterCursor,
         cursor::Show)?;
     stdout.flush()?;
     stdout.suspend_raw_mode()
