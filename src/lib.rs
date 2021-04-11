@@ -1,5 +1,6 @@
 extern crate termion;
 pub mod alarm;
+mod buffer;
 pub mod clock;
 pub mod consts;
 pub mod layout;
@@ -12,17 +13,17 @@ use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use signal_hook::{flag, low_level};
-use termion::{clear, color, cursor, style};
+use termion::{clear, cursor, style};
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
 use termion::input::TermRead;
 //use termion::cursor::DetectCursorPos;
-use utils::*;
+use buffer::Buffer;
 use clock::Clock;
 use layout::Layout;
 use alarm::{Countdown, exec_command};
 pub use alarm::AlarmRoster;
-pub use consts::*;
+pub use consts::ui::*;
 
 const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
 const SIGWINCH: usize = signal_hook::consts::SIGWINCH as usize;
@@ -47,11 +48,9 @@ pub fn run(
     layout.set_roster_width(alarm_roster.width());
     let mut clock = Clock::new();
     let mut countdown = Countdown::new();
-    let mut buffer = String::new();
+    let mut buffer = Buffer::new();
 
     // State variables.
-    // Request redraw of input buffer.
-    let mut update_buffer = false;
     // Request redraw of menu.
     let mut update_menu = false;
     // Are we in insert mode?
@@ -103,10 +102,9 @@ pub fn run(
         }
 
         // Update input buffer display, if requested.
-        if update_buffer {
-            draw_buffer(&mut stdout, &mut layout, &buffer)?;
+        if buffer.altered {
+            buffer.draw(&mut stdout, &mut layout)?;
             stdout.flush()?;
-            update_buffer = false;
         }
 
         // Update elapsed time.
@@ -166,7 +164,7 @@ pub fn run(
                 alarm_roster.draw(&mut stdout, &mut layout);
 
                 // Redraw buffer.
-                draw_buffer(&mut stdout, &mut layout, &buffer)?;
+                buffer.draw(&mut stdout, &mut layout)?;
 
                 // Schedule menu redraw.
                 update_menu = true;
@@ -236,9 +234,9 @@ pub fn run(
                 // Enter.
                 Key::Char('\n') => {
                     if !buffer.is_empty() {
-                        if let Err(e) = alarm_roster.add(&buffer) {
+                        if let Err(e) = alarm_roster.add(buffer.read()) {
                             // Error while processing input buffer.
-                            error_msg(&mut stdout, &layout, e)?;
+                            buffer.message(e);
                         } else {
                             // Input buffer processed without error.
                             layout.set_roster_width(alarm_roster.width());
@@ -251,11 +249,10 @@ pub fn run(
                 },
                 // Escape ^W, and ^U clear input buffer.
                 Key::Esc | Key::Ctrl('w') | Key::Ctrl('u') => {
-                    buffer.clear();
+                    buffer.reset();
                     insert_mode = false;
                     update_menu = true;
                     layout.force_redraw = true;
-                    update_buffer = true;
                 },
                 // Backspace.
                 Key::Backspace => {
@@ -267,12 +264,10 @@ pub fn run(
                             layout.force_redraw = true;
                         }
                     }
-                    update_buffer = true;
                 },
                 // Forward every char if in insert mode.
                 Key::Char(c) if insert_mode => {
                     buffer.push(c);
-                    update_buffer = true;
                 },
                 // Reset clock on 'r'.
                 Key::Char('r') => {
@@ -320,10 +315,8 @@ pub fn run(
                         insert_mode = true;
                         update_menu = true;
                         layout.force_redraw = true;
-                        update_buffer = true;
                     } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
-                        update_buffer = true;
                     }
                 },
                 // Any other key.
@@ -331,7 +324,7 @@ pub fn run(
             }
         } else {
             // Main loop delay.
-            thread::sleep(time::Duration::from_millis(200));
+            thread::sleep(time::Duration::from_millis(100));
         }
     }
 
@@ -448,52 +441,6 @@ pub fn register_signals(
     flag::register_usize(SIGUSR2 as i32, Arc::clone(&signal), SIGUSR2).unwrap();
     // SIGWINCH sets "force_recalc" directly.
     flag::register(SIGWINCH as i32, Arc::clone(&recalc_flag)).unwrap();
-}
-
-// Draw input buffer.
-fn draw_buffer<W: Write>(
-    stdout: &mut RawTerminal<W>,
-    layout: &mut Layout,
-    buffer: &String,
-) -> Result<(), std::io::Error>
-{
-    if !buffer.is_empty() {
-        write!(stdout,
-            "{}{}Add alarm: {}{}",
-            cursor::Goto(layout.buffer.col, layout.buffer.line),
-            clear::CurrentLine,
-            cursor::Show,
-            buffer)?;
-        layout.cursor.col = layout.buffer.col + 11 + unicode_length(buffer);
-        // TODO: This would be a much better alternative, but panics because
-        // of interference with async_reader.
-        //layout.cursor.col = stdout.cursor_pos()?.0;
-    } else {
-        // Clear buffer display.
-        write!(stdout,
-            "{}{}{}",
-            cursor::Goto(layout.buffer.col, layout.buffer.line),
-            clear::CurrentLine,
-            cursor::Hide)?;
-    }
-    Ok(())
-}
-
-// Draw error message at input buffer position.
-fn error_msg<W: Write>(
-    stdout: &mut RawTerminal<W>,
-    layout: &Layout,
-    msg: &str
-) -> Result<(), std::io::Error>
-{
-    write!(stdout,
-        "{}{}{}{}{}",
-        cursor::Goto(layout.error.col, layout.error.line),
-        color::Fg(color::LightRed),
-        msg,
-        color::Fg(color::Reset),
-        cursor::Hide)?;
-    Ok (())
 }
 
 // Prepare to suspend execution. Called on SIGTSTP.

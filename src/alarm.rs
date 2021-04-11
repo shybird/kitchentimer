@@ -81,7 +81,7 @@ impl AlarmRoster {
     }
 
     // Parse string and add as alarm.
-    pub fn add(&mut self, input: &String) -> Result<(), &str> {
+    pub fn add(&mut self, input: &String) -> Result<(), &'static str> {
         let mut index = 0;
         let mut time: u32 = 0;
         let mut label: String;

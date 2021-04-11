@@ -2,7 +2,8 @@ use std::time;
 use std::io::Write;
 use termion::{color, cursor};
 use termion::raw::RawTerminal;
-use crate::consts::*;
+use crate::consts::COLOR;
+use crate::consts::digits::*;
 use crate::layout::{Layout, Position};
 
 
