@@ -4,6 +4,8 @@ use termion::raw::RawTerminal;
 use crate::layout::Layout;
 use crate::utils;
 
+const PROMPT: &str = "Add alarm: ";
+
 
 pub struct Buffer {
     content: String,
@@ -65,7 +67,9 @@ impl Buffer {
             write!(stdout,
                 "{}{}{}{}{}{}",
                 cursor::Hide,
-                cursor::Goto(layout.error.col, layout.error.line),
+                cursor::Goto(
+                    layout.buffer.col + (PROMPT.len() as u16),
+                    layout.buffer.line),
                 clear::UntilNewline,
                 color::Fg(color::LightRed),
                 &msg,
@@ -75,9 +79,10 @@ impl Buffer {
 
         if !self.content.is_empty() {
             write!(stdout,
-                "{}{}Add alarm: {}{}",
+                "{}{}{}{}{}",
                 cursor::Goto(layout.buffer.col, layout.buffer.line),
-                clear::CurrentLine,
+                clear::UntilNewline,
+                PROMPT,
                 cursor::Show,
                 &self.content)?;
             layout.cursor.col =

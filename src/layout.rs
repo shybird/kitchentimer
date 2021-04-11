@@ -29,7 +29,6 @@ pub struct Layout {
     pub roster_width: u16,
     pub roster_height: u16,
     pub buffer: Position,
-    pub error: Position,
     pub cursor: Position,
 }
 
@@ -52,7 +51,6 @@ impl Layout {
             roster_width: 0,
             roster_height: 0,
             buffer: Position {col: 0, line: 0},
-            error: Position {col: 0, line: 0},
             cursor: Position {col: 1, line: 1},
         }
     }
@@ -140,12 +138,6 @@ impl Layout {
         self.buffer = Position {
             line: self.height,
             col: 1,
-        };
-
-        // Error messages.
-        self.error = Position {
-            line: self.height,
-            col: 12,
         };
 
         // Cursor. Column will be set by main loop.
