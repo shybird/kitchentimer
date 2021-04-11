@@ -1,12 +1,15 @@
+extern crate unicode_segmentation;
+
 use std::io::Write;
 use termion::{clear, cursor, color};
 use termion::raw::RawTerminal;
 use crate::layout::Layout;
-use crate::utils;
+use unicode_segmentation::UnicodeSegmentation;
 
 const PROMPT: &str = "Add alarm: ";
 
 
+// Input buffer.
 pub struct Buffer {
     content: String,
     // Used for error messages.
@@ -23,21 +26,46 @@ impl Buffer {
         }
     }
 
+    // Return reference to buffer content.
     pub fn read(&mut self) -> &String {
         self.altered = false;
         &self.content
     }
 
+    // Append char to buffer.
     pub fn push(&mut self, value: char) {
         self.altered = true;
+        // Reset error message.
         self.message = None;
         self.content.push(value);
     }
 
-    pub fn pop(&mut self) -> Option<char> {
-        self.altered = true;
+    // Remove last char. Return true if a char was removed.
+    pub fn strip_char(&mut self) -> bool {
+        // Reset error message.
         self.message = None;
-        self.content.pop()
+        if self.content.pop().is_some() {
+            self.altered = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    // Remove last word. Return true if a word was removed.
+    pub fn strip_word(&mut self) -> bool {
+        // Reset error message.
+        self.message = None;
+        let iter = UnicodeSegmentation::split_word_bound_indices(
+            self.content.as_str().trim_end());
+
+        if let Some((index, _)) = iter.last() {
+            self.content.truncate(index);
+            self.altered = true;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -63,6 +91,7 @@ impl Buffer {
         layout: &mut Layout,
     ) -> Result<(), std::io::Error>
     {
+        // Write error message if present and return.
         if let Some(msg) = self.message {
             write!(stdout,
                 "{}{}{}{}{}{}",
@@ -85,13 +114,6 @@ impl Buffer {
                 PROMPT,
                 cursor::Show,
                 &self.content)?;
-            layout.cursor.col =
-                layout.buffer.col
-                + 11
-                + utils::unicode_length(&self.content);
-            // TODO: This would be a much better alternative, but panics because
-            // of interference with async_reader.
-            //layout.cursor.col = stdout.cursor_pos()?.0;
         } else {
             // Clear buffer display.
             write!(stdout,

@@ -29,7 +29,6 @@ pub struct Layout {
     pub roster_width: u16,
     pub roster_height: u16,
     pub buffer: Position,
-    pub cursor: Position,
 }
 
 impl Layout {
@@ -51,7 +50,6 @@ impl Layout {
             roster_width: 0,
             roster_height: 0,
             buffer: Position {col: 0, line: 0},
-            cursor: Position {col: 1, line: 1},
         }
     }
 
@@ -139,9 +137,6 @@ impl Layout {
             line: self.height,
             col: 1,
         };
-
-        // Cursor. Column will be set by main loop.
-        self.cursor.line = self.buffer.line;
     }
 
     pub fn set_roster_width(&mut self, width: u16) {

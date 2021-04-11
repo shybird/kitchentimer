@@ -17,7 +17,6 @@ use termion::{clear, cursor, style};
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
 use termion::input::TermRead;
-//use termion::cursor::DetectCursorPos;
 use buffer::Buffer;
 use clock::Clock;
 use layout::Layout;
@@ -102,10 +101,12 @@ pub fn run(
         }
 
         // Update input buffer display, if requested.
+        /*
         if buffer.altered {
             buffer.draw(&mut stdout, &mut layout)?;
             stdout.flush()?;
         }
+        */
 
         // Update elapsed time.
         let elapsed = if clock.paused {
@@ -194,14 +195,6 @@ pub fn run(
                 countdown.draw(&mut stdout);
             }
 
-            // Move cursor to buffer position.
-            if insert_mode {
-                write!(
-                    stdout,
-                    "{}",
-                    cursor::Goto(layout.cursor.col, layout.cursor.line))?;
-            }
-
             // Check any spawned child process.
             if let Some(ref mut child) = spawned {
                 match child.try_wait() {
@@ -228,6 +221,12 @@ pub fn run(
             stdout.flush()?;
         }
 
+        // Update buffer whenever the cursor is visible.
+        if insert_mode || buffer.altered {
+            buffer.draw(&mut stdout, &mut layout)?;
+            stdout.flush()?;
+        }
+
         // Process input.
         if let Some(key) = input_keys.next() {
             match key.expect("Error reading input") {
@@ -248,21 +247,27 @@ pub fn run(
                     }
                 },
                 // Escape ^W, and ^U clear input buffer.
-                Key::Esc | Key::Ctrl('w') | Key::Ctrl('u') => {
+                Key::Esc | Key::Ctrl('u') => {
                     buffer.reset();
                     insert_mode = false;
                     update_menu = true;
                     layout.force_redraw = true;
                 },
+                // ^W removes last word.
+                Key::Ctrl('w') => {
+                    if !buffer.strip_word() {
+                        insert_mode = false;
+                        update_menu = true;
+                        layout.force_redraw = true;
+                    }
+                },
                 // Backspace.
                 Key::Backspace => {
                     // Delete last char in buffer.
-                    if buffer.pop().is_some() {
-                        if buffer.is_empty() {
-                            insert_mode = false;
-                            update_menu = true;
-                            layout.force_redraw = true;
-                        }
+                    if buffer.strip_char() && buffer.is_empty() {
+                        insert_mode = false;
+                        update_menu = true;
+                        layout.force_redraw = true;
                     }
                 },
                 // Forward every char if in insert mode.
