@@ -1,4 +1,5 @@
 extern crate termion;
+extern crate signal_hook;
 pub mod alarm;
 mod buffer;
 pub mod clock;
@@ -10,9 +11,9 @@ mod tests;
 
 use std::{env, process, thread, time};
 use std::io::Write;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use signal_hook::{flag, low_level};
+use signal_hook::consts::signal::*;
+use signal_hook::iterator::Signals;
+use signal_hook::low_level;
 use termion::{clear, cursor, style};
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
@@ -24,37 +25,37 @@ use alarm::{Countdown, exec_command};
 pub use alarm::AlarmRoster;
 pub use consts::ui::*;
 
-const SIGTSTP: usize = signal_hook::consts::SIGTSTP as usize;
-const SIGWINCH: usize = signal_hook::consts::SIGWINCH as usize;
-const SIGCONT: usize = signal_hook::consts::SIGCONT as usize;
-const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
-const SIGINT: usize = signal_hook::consts::SIGINT as usize;
-const SIGUSR1: usize = signal_hook::consts::SIGUSR1 as usize;
-const SIGUSR2: usize = signal_hook::consts::SIGUSR2 as usize;
-
 
 pub fn run(
     config: Config,
     mut alarm_roster: AlarmRoster,
-    signal: Arc<AtomicUsize>,
-    sigwinch: Arc<AtomicBool>,
     spawned: &mut Option<process::Child>,
 ) -> Result<(), std::io::Error>
 {
-    let mut layout = Layout::new(sigwinch);
+    let mut layout = Layout::new();
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
     let mut clock = Clock::new(&config);
     let mut countdown = Countdown::new();
     let mut buffer = Buffer::new();
-
-    // Are we in insert mode?
-    let mut insert_mode = false;
-
     let async_stdin = termion::async_stdin();
     let mut input_keys = async_stdin.keys();
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock().into_raw_mode()?;
+
+    // Are we in insert mode?
+    let mut insert_mode = false;
+
+    // Register signals.
+    let mut signals = Signals::new(&[
+        SIGTSTP,
+        SIGCONT,
+        SIGWINCH,
+        SIGTERM,
+        SIGINT,
+        SIGUSR1,
+        SIGUSR2,
+    ]).unwrap();
 
     // Clear window and hide cursor.
     write!(stdout, "{}{}", clear::All, cursor::Hide)?;
@@ -62,47 +63,31 @@ pub fn run(
     // Main loop entry.
     loop {
         // Process received signals.
-        match signal.swap(0, Ordering::Relaxed) {
-            // No signal received.
-            0 => (),
-            // Suspend execution on SIGTSTP.
-            SIGTSTP => {
-                suspend(&mut stdout)?;
-                // Clear SIGCONT, as we have already taken care to reset the
-                // terminal.
-                signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
-                layout.force_redraw = true;
-                // Jump to the start of the main loop.
-                continue;
-            },
-            // Continuing after SIGSTOP.
-            SIGCONT => {
-                // This is reached when the process was suspended by SIGSTOP.
-                restore_after_suspend(&mut stdout)?;
-                layout.force_redraw = true;
-            },
-            // Exit main loop on SIGTERM and SIGINT.
-            SIGTERM | SIGINT => break,
-            // Reset clock on SIGUSR1.
-            SIGUSR1 => {
-                clock.reset();
-                alarm_roster.reset_all();
-                layout.force_recalc.store(true, Ordering::Relaxed);
-                layout.force_redraw = true;
-            },
-            // (Un-)Pause clock on SIGUSR2.
-            SIGUSR2 => clock.toggle(),
-            // We didn't register anything else.
-            _ => unreachable!(),
+        'outer: for signal in signals.pending() {
+            match signal {
+                // Suspend execution on SIGTSTP.
+                SIGTSTP => suspend(&mut stdout)?,
+                // Continuing after SIGTSTP or SIGSTOP.
+                SIGCONT => {
+                    restore_after_suspend(&mut stdout)?;
+                    layout.force_redraw = true;
+                },
+                SIGWINCH => layout.force_recalc = true,
+                // Exit main loop on SIGTERM and SIGINT.
+                SIGTERM | SIGINT => break 'outer,
+                // Reset clock on SIGUSR1.
+                SIGUSR1 => {
+                    clock.reset();
+                    alarm_roster.reset_all();
+                    layout.force_recalc = true;
+                    layout.force_redraw = true;
+                },
+                // (Un-)Pause clock on SIGUSR2.
+                SIGUSR2 => clock.toggle(),
+                // We didn't register anything else.
+                _ => unreachable!(),
+            }
         }
-
-        // Update input buffer display, if requested.
-        /*
-        if buffer.altered {
-            buffer.draw(&mut stdout, &mut layout)?;
-            stdout.flush()?;
-        }
-        */
 
         // Update elapsed time.
         let elapsed = if clock.paused {
@@ -123,13 +108,13 @@ pub fn run(
                 clock.next_day();
                 // "clock.elapsed" set by "clock.next_day()".
                 alarm_roster.reset_all();
-                layout.force_recalc.store(true, Ordering::Relaxed);
+                layout.force_recalc = true;
             }
 
             // Update window size information and calculate the clock position.
             // Also enforce recalculation of layout if we start displaying
             // hours.
-            layout.update(&clock, clock.elapsed == 3600);
+            layout.update(&clock, clock.elapsed == 3600)?;
 
             // Check for exceeded alarms.
             if let Some((time, label)) = alarm_roster.check(&mut clock, &layout, &mut countdown) {
@@ -269,7 +254,7 @@ pub fn run(
                 Key::Char('r') => {
                     clock.reset();
                     alarm_roster.reset_all();
-                    layout.force_recalc.store(true, Ordering::Relaxed);
+                    layout.force_recalc = true;
                     layout.force_redraw = true;
                 },
                 // (Un-)Pause on space.
@@ -301,7 +286,7 @@ pub fn run(
                     suspend(&mut stdout)?;
                     // Clear SIGCONT, as we have already taken care to reset
                     // the terminal.
-                    signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
+                    //signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
                     layout.force_redraw = true;
                     // Jump to the start of the main loop.
                     continue;
@@ -430,22 +415,8 @@ impl Config {
     }
 }
 
-pub fn register_signals(
-    signal: &Arc<AtomicUsize>,
-    recalc_flag: &Arc<AtomicBool>,
-) {
-    flag::register_usize(SIGTSTP as i32, Arc::clone(&signal), SIGTSTP).unwrap();
-    flag::register_usize(SIGCONT as i32, Arc::clone(&signal), SIGCONT).unwrap();
-    flag::register_usize(SIGTERM as i32, Arc::clone(&signal), SIGTERM).unwrap();
-    flag::register_usize(SIGINT as i32, Arc::clone(&signal), SIGINT).unwrap();
-    flag::register_usize(SIGUSR1 as i32, Arc::clone(&signal), SIGUSR1).unwrap();
-    flag::register_usize(SIGUSR2 as i32, Arc::clone(&signal), SIGUSR2).unwrap();
-    // SIGWINCH sets "force_recalc" directly.
-    flag::register(SIGWINCH as i32, Arc::clone(&recalc_flag)).unwrap();
-}
-
 // Prepare to suspend execution. Called on SIGTSTP.
-fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>)
+fn suspend<W: Write>(stdout: &mut RawTerminal<W>)
     -> Result<(), std::io::Error>
 {
     write!(stdout,
@@ -463,7 +434,8 @@ fn suspend<W: Write>(mut stdout: &mut RawTerminal<W>)
         eprintln!("Error raising SIGTSTP: {}", error);
     }
 
-    restore_after_suspend(&mut stdout)
+    //restore_after_suspend(&mut stdout)
+    Ok(())
 }
 
 // Set up terminal after SIGTSTP or SIGSTOP.

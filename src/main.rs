@@ -1,10 +1,6 @@
-extern crate signal_hook;
-
 use std::{env, process};
 use std::io::Write;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
-use kitchentimer::{Config, AlarmRoster, register_signals, run};
+use kitchentimer::{Config, AlarmRoster, run};
 
 
 fn main() {
@@ -17,15 +13,11 @@ fn main() {
             process::exit(1);
         });
 
-    // Register signal handlers.
-    let signal = Arc::new(AtomicUsize::new(0));
-    let sigwinch = Arc::new(AtomicBool::new(true));
-    register_signals(&signal, &sigwinch);
     // Holds spawned child process if any.
     let mut spawned: Option<process::Child> = None;
 
     // Run main loop.
-    if let Err(e) = run(config, alarm_roster, signal, sigwinch, &mut spawned) {
+    if let Err(e) = run(config, alarm_roster, &mut spawned) {
         println!("Main loop exited with error: {}", e);
         process::exit(1);
     }

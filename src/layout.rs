@@ -1,5 +1,3 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use crate::clock::Clock;
 
 pub struct Position {
@@ -9,7 +7,7 @@ pub struct Position {
 
 pub struct Layout {
     pub force_redraw: bool, // Redraw elements on screen.
-    pub force_recalc: Arc<AtomicBool>, // Recalculate position of elements.
+    pub force_recalc: bool, // Recalculate position of elements.
     pub width: u16,
     pub height: u16,
     clock_width: u16,
@@ -28,11 +26,10 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn new(sigwinch: Arc<AtomicBool>) -> Layout {
+    pub fn new() -> Layout {
         Layout {
             force_redraw: true,
-            // May be set by signal handler (SIGWINCH).
-            force_recalc: sigwinch,
+            force_recalc: true,
             width: 0,
             height: 0,
             clock_width: 0,
@@ -51,10 +48,12 @@ impl Layout {
         }
     }
 
-    pub fn update(&mut self, clock: &Clock, force: bool) {
-        if self.force_recalc.swap(false, Ordering::Relaxed) || force {
-            let (width, height) = termion::terminal_size()
-                .expect("Could not read terminal size!");
+    pub fn update(&mut self, clock: &Clock, force: bool)
+        -> Result<(), std::io::Error>
+    {
+        if self.force_recalc || force {
+            self.force_recalc = false;
+            let (width, height) = termion::terminal_size()?;
             self.width = width;
             self.height = height;
             self.clock_width = clock.get_width();
@@ -63,6 +62,7 @@ impl Layout {
             self.compute(clock.elapsed >= 3600);
             self.force_redraw = true;
         }
+        Ok(())
     }
 
     #[cfg(test)]
@@ -146,7 +146,7 @@ impl Layout {
     pub fn set_roster_width(&mut self, width: u16) {
         if self.width != width {
             self.roster_width = width;
-            self.force_recalc.store(true, Ordering::Relaxed);
+            self.force_recalc = true;
         }
     }
 }
