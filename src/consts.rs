@@ -9,7 +9,7 @@ pub const COLOR: [&dyn termion::color::Color; 6] = [
 ];
 
 // Maximum length of labels.
-pub const LABEL_SIZE_LIMIT: usize = 42;
+pub const LABEL_SIZE_LIMIT: usize = 32;
 
 pub mod ui {
     pub const NAME: &str = env!("CARGO_PKG_NAME");
