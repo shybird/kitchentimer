@@ -45,7 +45,7 @@ pub fn run(
     layout.force_recalc = sigwinch;
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
-    let mut clock = Clock::new();
+    let mut clock = Clock::new(&config);
     let mut countdown = Countdown::new();
     let mut buffer = Buffer::new();
 
@@ -182,7 +182,7 @@ pub fn run(
                 buffer.draw(&mut stdout, &mut layout)?;
             }
 
-            clock.draw(&mut stdout, &layout);
+            clock.draw(&mut stdout, &layout)?;
 
             // Display countdown.
             if countdown.value > 0 {
@@ -392,33 +392,37 @@ impl Config {
     // for process::Command::new().
     fn parse_to_command(input: &str) -> Vec<String> {
         let mut command: Vec<String> = Vec::new();
-        let mut buffer: String = String::new();
+        let mut segment: String = String::new();
         let mut quoted = false;
         let mut escaped = false;
 
-        for byte in input.chars() {
-            match byte {
+        for c in input.chars() {
+            match c {
                 '\\' if !escaped => {
-                    // Next char is escaped.
+                    // Next char is escaped. (If not escaped itself.)
                     escaped = true;
                     continue;
                 },
-                ' ' if escaped || quoted => { &buffer.push(' '); },
+                // Keep spaces when escaped or quoted.
+                ' ' if escaped || quoted => { &segment.push(' '); },
+                // Otherwise end the current segment.
                 ' ' => {
-                    if !&buffer.is_empty() {
-                        command.push(buffer.clone());
-                        &buffer.clear();
+                    if !&segment.is_empty() {
+                        command.push(segment.clone());
+                        &segment.clear();
                     }
                 },
+                // Quotation marks toggle quote.
                 '"' | '\'' if !escaped => quoted = !quoted,
+                // Carry everything else. Escape if found escaped.
                 _ => {
-                    if escaped { &buffer.push('\\'); }
-                    &buffer.push(byte);
+                    if escaped { &segment.push('\\'); }
+                    &segment.push(c);
                 },
             }
             escaped = false;
         }
-        command.push(buffer);
+        command.push(segment);
         command.shrink_to_fit();
         command
     }

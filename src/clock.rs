@@ -1,9 +1,11 @@
+pub mod font;
+
 use std::time;
 use std::io::Write;
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use crate::consts::COLOR;
-use crate::consts::digits::*;
+use crate::Config;
 use crate::layout::{Layout, Position};
 
 pub struct Clock {
@@ -13,10 +15,11 @@ pub struct Clock {
     pub paused: bool,
     paused_at: Option<time::Instant>,
     pub color_index: Option<usize>,
+    font: font::Font,
 }
 
 impl Clock {
-    pub fn new() -> Clock {
+    pub fn new(config: &Config) -> Clock {
         Clock {
             start: time::Instant::now(),
             elapsed: 0,
@@ -24,6 +27,10 @@ impl Clock {
             paused: false,
             paused_at: None,
             color_index: None,
+            font: match config.plain {
+                false => font::NORMAL,
+                true => font::PLAIN,
+            },
         }
     }
 
@@ -81,13 +88,14 @@ impl Clock {
         &mut self,
         mut stdout: &mut RawTerminal<W>,
         layout: &Layout,
-    ) {
+    ) -> Result<(), std::io::Error>
+    {
         // Setup style and color if appropriate.
         if self.paused {
-            write!(stdout, "{}", style::Faint).unwrap();
+            write!(stdout, "{}", style::Faint)?;
         }
         if let Some(c) = self.color_index {
-            write!(stdout, "{}", color::Fg(COLOR[c])).unwrap();
+            write!(stdout, "{}", color::Fg(COLOR[c]))?;
         }
 
         // Draw hours if necessary.
@@ -96,14 +104,12 @@ impl Clock {
                 self.draw_digit_pair(
                     &mut stdout,
                     self.elapsed / 3600,
-                    &layout.clock_hr,
-                    layout.plain);
+                    &layout.clock_hr)?;
 
                 // Draw colon.
                 self.draw_colon(
                     &mut stdout,
-                    &layout.clock_colon1,
-                    layout.plain);
+                    &layout.clock_colon1)?;
             }
 
             // Draw days.
@@ -119,8 +125,7 @@ impl Clock {
                         layout.clock_days.col,
                         layout.clock_days.line,
                     ),
-                    day_count)
-                    .unwrap();
+                    day_count)?;
             }
         }
 
@@ -129,33 +134,30 @@ impl Clock {
             self.draw_digit_pair(
                 &mut stdout,
                 (self.elapsed % 3600) / 60,
-                &layout.clock_min,
-                layout.plain);
+                &layout.clock_min)?;
         }
 
         // Draw colon if necessary.
         if layout.force_redraw {
             self.draw_colon(
                 &mut stdout,
-                &layout.clock_colon0,
-                layout.plain);
+                &layout.clock_colon0)?;
         }
 
         // Draw seconds.
         self.draw_digit_pair(
             &mut stdout,
             self.elapsed % 60,
-            &layout.clock_sec,
-            layout.plain);
+            &layout.clock_sec)?;
 
         // Reset color and style.
         if self.paused || self.color_index != None {
             write!(stdout,
                 "{}{}",
                 style::NoFaint,
-                color::Fg(color::Reset))
-                .unwrap();
+                color::Fg(color::Reset))?;
         }
+        Ok(())
     }
 
     fn draw_digit_pair<W: Write>(
@@ -163,37 +165,35 @@ impl Clock {
         stdout: &mut RawTerminal<W>,
         value: u32,
         pos: &Position,
-        plain: bool,
-    ) {
-        let digits = if plain { DIGITS_PLAIN } else { DIGITS };
-
-        for l in 0..DIGIT_HEIGHT {
+    ) -> Result<(), std::io::Error>
+    {
+        for l in 0..self.font.height {
             write!(stdout,
                 "{}{} {}",
                 cursor::Goto(pos.col, pos.line + l),
                 // First digit.
-                digits[(value / 10) as usize][l as usize],
+                self.font.digits[(value / 10) as usize][l as usize],
                 // Second digit.
-                digits[(value % 10) as usize][l as usize])
-                .unwrap();
+                self.font.digits[(value % 10) as usize][l as usize]
+            )?;
         }
+        Ok(())
     }
 
     fn draw_colon<W: Write>(
         &self,
         stdout: &mut RawTerminal<W>,
         pos: &Position,
-        plain: bool,
-    ) {
-        let dot = if plain {'█'} else {'■'};
-
+    ) -> Result<(), std::io::Error>
+    {
         write!(stdout,
             "{}{}{}{}",
             cursor::Goto(pos.col, pos.line + 1),
-            dot,
+            self.font.dot,
             cursor::Goto(pos.col, pos.line + 3),
-            dot)
-            .unwrap();
+            self.font.dot,
+        )?;
+        Ok(())
     }
 }
 
