@@ -52,10 +52,7 @@ pub fn run(
         SIGINT,
         SIGUSR1,
         SIGUSR2,
-    ]).unwrap();
-
-    // Clear window and hide cursor.
-    write!(stdout, "{}{}", clear::All, cursor::Hide)?;
+    ])?;
 
     // Main loop entry.
     loop {
@@ -444,10 +441,6 @@ fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>)
             eprintln!("Failed to re-enter raw terminal mode after suspend: {}", error);
             process::exit(1);
         });
-    write!(stdout,
-        "{}{}",
-        clear::All,
-        cursor::Hide)?;
     Ok(())
 }
 
