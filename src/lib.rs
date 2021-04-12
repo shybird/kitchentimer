@@ -77,7 +77,10 @@ pub fn run(
                     layout.force_redraw = true;
                 },
                 // (Un-)Pause clock on SIGUSR2.
-                SIGUSR2 => clock.toggle(),
+                SIGUSR2 => {
+                    clock.toggle();
+                    layout.force_redraw = true;
+                },
                 // We didn't register anything else.
                 _ => unreachable!(),
             }
@@ -126,7 +129,7 @@ pub fn run(
                     }
                 }
                 // Quit if configured.
-                if config.quit && !alarm_roster.active() {
+                if config.quit && alarm_roster.idle() {
                     break;
                 }
             }

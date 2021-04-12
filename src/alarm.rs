@@ -158,8 +158,8 @@ impl AlarmRoster {
     }
 
     // Check for active alarms.
-    pub fn active(&self) -> bool {
-        self.list.iter().any(|a| !a.exceeded)
+    pub fn idle(&self) -> bool {
+        !self.list.iter().any(|a| !a.exceeded)
     }
 
     // Check for exceeded alarms.
