@@ -40,20 +40,17 @@ impl Buffer {
         self.content.push(value);
     }
 
-    // Remove last char. Return true if a char was removed.
-    pub fn strip_char(&mut self) -> bool {
+    // Remove last char.
+    pub fn strip_char(&mut self) {
         // Reset error message.
         self.message = None;
         if self.content.pop().is_some() {
             self.altered = true;
-            true
-        } else {
-            false
         }
     }
 
-    // Remove last word. Return true if a word was removed.
-    pub fn strip_word(&mut self) -> bool {
+    // Remove last word.
+    pub fn strip_word(&mut self) {
         // Reset error message.
         self.message = None;
         let iter = UnicodeSegmentation::split_word_bound_indices(
@@ -62,9 +59,6 @@ impl Buffer {
         if let Some((index, _)) = iter.last() {
             self.content.truncate(index);
             self.altered = true;
-            true
-        } else {
-            false
         }
     }
 

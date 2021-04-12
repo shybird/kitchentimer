@@ -239,7 +239,7 @@ pub fn run(
                         layout.force_redraw = true;
                     }
                 },
-                // Escape ^W, and ^U clear input buffer.
+                // Escape and ^U clear input buffer.
                 Key::Esc | Key::Ctrl('u') => {
                     buffer.reset();
                     insert_mode = false;
@@ -247,7 +247,8 @@ pub fn run(
                 },
                 // ^W removes last word.
                 Key::Ctrl('w') => {
-                    if !buffer.strip_word() {
+                    buffer.strip_word();
+                    if buffer.is_empty() {
                         insert_mode = false;
                         layout.force_redraw = true;
                     }
@@ -255,7 +256,8 @@ pub fn run(
                 // Backspace.
                 Key::Backspace => {
                     // Delete last char in buffer.
-                    if buffer.strip_char() && buffer.is_empty() {
+                    buffer.strip_char();
+                    if buffer.is_empty() {
                         insert_mode = false;
                         layout.force_redraw = true;
                     }
