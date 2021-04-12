@@ -27,7 +27,9 @@ impl Countdown {
     }
 
     // Draw countdown.
-    pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>) {
+    pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>)
+        -> Result<(), std::io::Error>
+    {
         if let Some(pos) = &self.position {
             if self.value < 3600 {
                 // Show minutes and seconds.
@@ -35,12 +37,11 @@ impl Countdown {
                     "{}(-{:02}:{:02})",
                     cursor::Goto(pos.col, pos.line),
                     (self.value / 60) % 60,
-                    self.value % 60)
-                    .unwrap();
+                    self.value % 60)?;
                 if self.value == 3599 {
                     // Write three additional spaces after switching from hour display to
                     // minute display.
-                    write!(stdout, "   ").unwrap();
+                    write!(stdout, "   ")?;
                 }
             } else {
                 // Show hours, minutes and seconds.
@@ -49,10 +50,10 @@ impl Countdown {
                     cursor::Goto(pos.col, pos.line),
                     self.value / 3600,
                     (self.value / 60) % 60,
-                    self.value % 60)
-                    .unwrap();
+                    self.value % 60)?;
             }
         }
+        Ok(())
     }
 }
 
@@ -224,7 +225,8 @@ impl AlarmRoster {
         &self,
         stdout: &mut RawTerminal<W>,
         layout: &mut Layout
-    ) {
+    ) -> Result<(), std::io::Error>
+    {
         let mut index = 0;
 
         // Find first item to print in case we lack space to print them all.
@@ -240,7 +242,7 @@ impl AlarmRoster {
                 "{}{}[...]{}",
                 cursor::Goto(layout.roster.col, layout.roster.line),
                 style::Faint,
-                style::Reset).unwrap();
+                style::Reset)?;
         }
 
         for alarm in &self.list[first..] {
@@ -252,19 +254,18 @@ impl AlarmRoster {
                     color::Bg(color::Reset),
                     style::Bold,
                     &alarm.label,
-                    style::Reset)
-                    .unwrap();
+                    style::Reset)?;
             } else {
                 write!(stdout,
                     "{}{} {} {}",
                     cursor::Goto(layout.roster.col, layout.roster.line + index),
                     color::Bg(COLOR[alarm.color_index]),
                     color::Bg(color::Reset),
-                    &alarm.label)
-                    .unwrap();
+                    &alarm.label)?;
             }
             index += 1;
         }
+        Ok(())
     }
 
     // Return width of roster.

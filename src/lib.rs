@@ -157,7 +157,7 @@ pub fn run(
                     style::NoFaint)?;
 
                 // Redraw list of alarms.
-                alarm_roster.draw(&mut stdout, &mut layout);
+                alarm_roster.draw(&mut stdout, &mut layout)?;
 
                 // Redraw buffer.
                 buffer.draw(&mut stdout, &mut layout)?;
@@ -167,7 +167,7 @@ pub fn run(
 
             // Display countdown.
             if countdown.value > 0 {
-                countdown.draw(&mut stdout);
+                countdown.draw(&mut stdout)?;
             }
 
             // Check any spawned child process.
