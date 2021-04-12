@@ -130,7 +130,7 @@ pub fn run(
             // Update window size information and calculate the clock position.
             // Also enforce recalculation of layout if we start displaying
             // hours.
-            layout.update(clock.elapsed >= 3600, clock.elapsed == 3600);
+            layout.update(&clock, clock.elapsed == 3600);
 
             // Check for exceeded alarms.
             if let Some((time, label)) = alarm_roster.check(&mut clock, &layout, &mut countdown) {

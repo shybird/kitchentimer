@@ -280,8 +280,8 @@ impl AlarmRoster {
 
     // Reset every alarm.
     pub fn reset_all(&mut self) {
-        for a in &mut self.list {
-            a.reset();
+        for alarm in &mut self.list {
+            alarm.reset();
         }
     }
 }

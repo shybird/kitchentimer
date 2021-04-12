@@ -1,6 +1,5 @@
 
-pub const DIGIT_HEIGHT: u16 = 5;
-pub const DIGIT_WIDTH: u16 = 5;
+const DIGIT_HEIGHT: u16 = 5;
 
 pub struct Font {
     pub height: u16,

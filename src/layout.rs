@@ -1,12 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use crate::Config;
-use crate::clock::font::*;
-
-// If screen size falls below these values we skip computation of new
-// positions.
-const MIN_WIDTH: u16 = DIGIT_WIDTH * 6 + 13;
-const MIN_HEIGHT: u16 = DIGIT_HEIGHT + 2;
+use crate::clock::Clock;
 
 pub struct Position {
     pub line: u16,
@@ -19,6 +14,9 @@ pub struct Layout {
     pub plain: bool, // Plain style clock.
     pub width: u16,
     pub height: u16,
+    clock_width: u16,
+    clock_height: u16,
+    digit_width: u16,
     pub clock_sec: Position,
     pub clock_colon0: Position,
     pub clock_min: Position,
@@ -40,6 +38,9 @@ impl Layout {
             plain: config.plain,
             width: 0,
             height: 0,
+            clock_width: 0,
+            clock_height: 0,
+            digit_width: 0,
             clock_sec: Position {col: 0, line: 0},
             clock_colon0: Position {col: 0, line: 0},
             clock_min: Position {col: 0, line: 0},
@@ -53,13 +54,16 @@ impl Layout {
         }
     }
 
-    pub fn update(&mut self, display_hours: bool, force: bool) {
+    pub fn update(&mut self, clock: &Clock, force: bool) {
         if self.force_recalc.swap(false, Ordering::Relaxed) || force {
             let (width, height) = termion::terminal_size()
                 .expect("Could not read terminal size!");
             self.width = width;
             self.height = height;
-            self.compute(display_hours);
+            self.clock_width = clock.get_width();
+            self.clock_height = clock.font.height;
+            self.digit_width = clock.font.width;
+            self.compute(clock.elapsed >= 3600);
             self.force_redraw = true;
         }
     }
@@ -67,15 +71,18 @@ impl Layout {
     #[cfg(test)]
     pub fn test_update(
         &mut self,
-        hours: bool,
+        clock: &Clock,
         width: u16,
         height: u16,
         roster_width: u16,
     ) {
         self.width = width;
         self.height = height;
+        self.clock_width = clock.get_width();
+        self.clock_height = clock.font.height;
+        self.digit_width = clock.font.width;
         self.roster_width = roster_width;
-        self.compute(hours);
+        self.compute(false);
     }
 
     pub fn can_hold(&self, other: &str) -> bool {
@@ -87,27 +94,27 @@ impl Layout {
     // terminal.
     fn compute(&mut self, display_hours: bool) {
         // Prevent integer overflow at very low screen sizes.
-        if self.width < MIN_WIDTH || self.height < MIN_HEIGHT { return; }
+        if self.width < self.clock_width || self.height < self.clock_height { return; }
 
         let middle: u16 = self.height / 2 - 1;
 
         if display_hours {
             // Seconds digits.
-            self.clock_sec.col = (self.width + self.roster_width) / 2 + DIGIT_WIDTH + 6;
+            self.clock_sec.col = (self.width + self.roster_width) / 2 + self.digit_width + 6;
             // Colon separating minutes from seconds.
-            self.clock_colon0.col = (self.width + self.roster_width) / 2 + DIGIT_WIDTH + 3;
+            self.clock_colon0.col = (self.width + self.roster_width) / 2 + self.digit_width + 3;
             // Minute digits.
-            self.clock_min.col = (self.width + self.roster_width) / 2 - DIGIT_WIDTH;
+            self.clock_min.col = (self.width + self.roster_width) / 2 - self.digit_width;
 
             // Colon separating hours from minutes.
             self.clock_colon1 = Position {
-                col: (self.width + self.roster_width) / 2 - (DIGIT_WIDTH + 3),
+                col: (self.width + self.roster_width) / 2 - (self.digit_width + 3),
                 line: middle,
             };
 
             // Hour digits.
             self.clock_hr = Position {
-                col: (self.width + self.roster_width) / 2 - (DIGIT_WIDTH * 3 + 6),
+                col: (self.width + self.roster_width) / 2 - (self.digit_width * 3 + 6),
                 line: middle,
             };
         } else {
@@ -116,7 +123,7 @@ impl Layout {
             // Colon separating minutes from seconds.
             self.clock_colon0.col = (self.width + self.roster_width) / 2;
             // Minute digits.
-            self.clock_min.col = (self.width + self.roster_width) / 2 - (DIGIT_WIDTH * 2 + 3);
+            self.clock_min.col = (self.width + self.roster_width) / 2 - (self.digit_width * 2 + 3);
         }
 
         self.clock_sec.line = middle;
@@ -125,7 +132,7 @@ impl Layout {
 
         // Days (based on position of seconds).
         self.clock_days = Position {
-            line: self.clock_sec.line + DIGIT_HEIGHT,
+            line: self.clock_sec.line + self.digit_width,
             col: self.clock_sec.col,
         };
 

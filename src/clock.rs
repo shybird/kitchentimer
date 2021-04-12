@@ -15,7 +15,7 @@ pub struct Clock {
     pub paused: bool,
     paused_at: Option<time::Instant>,
     pub color_index: Option<usize>,
-    font: font::Font,
+    pub font: font::Font,
 }
 
 impl Clock {
@@ -68,6 +68,16 @@ impl Clock {
             self.unpause();
         } else {
             self.pause();
+        }
+    }
+
+    pub fn get_width(&self) -> u16 {
+        if self.elapsed >= 3600 {
+            // Hours
+            self.font.width * 6 + 3 + 10
+        } else {
+            // Minutes and seconds only.
+            self.font.width * 4 + 2 + 5
         }
     }
 
