@@ -14,27 +14,25 @@ pub struct Buffer {
     content: String,
     // Used for error messages.
     message: Option<&'static str>,
-    pub altered: bool,
+    pub visible: bool,
 }
 
 impl Buffer {
     pub fn new() -> Buffer {
         Buffer {
             content: String::new(),
-            altered: false,
             message: None,
+            visible: false,
         }
     }
 
     // Return reference to buffer content.
     pub fn read(&mut self) -> &String {
-        self.altered = false;
         &self.content
     }
 
     // Append char to buffer.
     pub fn push(&mut self, value: char) {
-        self.altered = true;
         // Reset error message.
         self.message = None;
         self.content.push(value);
@@ -44,9 +42,7 @@ impl Buffer {
     pub fn strip_char(&mut self) {
         // Reset error message.
         self.message = None;
-        if self.content.pop().is_some() {
-            self.altered = true;
-        }
+        self.content.pop();
     }
 
     // Remove last word.
@@ -58,7 +54,6 @@ impl Buffer {
 
         if let Some((index, _)) = iter.last() {
             self.content.truncate(index);
-            self.altered = true;
         }
     }
 
@@ -68,7 +63,6 @@ impl Buffer {
 
     // Clear input.
     pub fn clear(&mut self) {
-        self.altered = true;
         self.content.clear();
     }
 
@@ -124,6 +118,5 @@ impl Buffer {
         msg: &'static str,
     ) {
         self.message = Some(msg);
-        self.altered = true;
     }
 }

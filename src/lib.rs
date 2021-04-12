@@ -43,9 +43,6 @@ pub fn run(
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock().into_raw_mode()?;
 
-    // Are we in insert mode?
-    let mut insert_mode = false;
-
     // Register signals.
     let mut signals = Signals::new(&[
         SIGTSTP,
@@ -147,7 +144,7 @@ pub fn run(
                     style::Faint,
                     // Switch menu bars. Use a compressed version or none at
                     // all if necessary.
-                    match insert_mode {
+                    match buffer.visible {
                         true if layout.can_hold(MENUBAR_INS) => MENUBAR_INS,
                         false if layout.can_hold(MENUBAR) => MENUBAR,
                         false if layout.can_hold(MENUBAR_SHORT) => MENUBAR_SHORT,
@@ -200,7 +197,7 @@ pub fn run(
         }
 
         // Update buffer whenever the cursor should be visible.
-        if insert_mode || buffer.altered {
+        if buffer.visible {
             buffer.draw(&mut stdout, &mut layout)?;
             stdout.flush()?;
         }
@@ -219,21 +216,21 @@ pub fn run(
                             layout.set_roster_width(alarm_roster.width());
                         }
                         buffer.clear();
-                        insert_mode = false;
+                        buffer.visible = false;
                         layout.force_redraw = true;
                     }
                 },
                 // Escape and ^U clear input buffer.
                 Key::Esc | Key::Ctrl('u') => {
                     buffer.reset();
-                    insert_mode = false;
+                    buffer.visible = false;
                     layout.force_redraw = true;
                 },
                 // ^W removes last word.
                 Key::Ctrl('w') => {
                     buffer.strip_word();
                     if buffer.is_empty() {
-                        insert_mode = false;
+                        buffer.visible = false;
                         layout.force_redraw = true;
                     }
                 },
@@ -242,12 +239,12 @@ pub fn run(
                     // Delete last char in buffer.
                     buffer.strip_char();
                     if buffer.is_empty() {
-                        insert_mode = false;
+                        buffer.visible = false;
                         layout.force_redraw = true;
                     }
                 },
                 // Forward every char if in insert mode.
-                Key::Char(c) if insert_mode => {
+                Key::Char(c) if buffer.visible => {
                     buffer.push(c);
                 },
                 // Reset clock on 'r'.
@@ -294,7 +291,7 @@ pub fn run(
                 Key::Char(c) => {
                     if c.is_ascii_digit() {
                         buffer.push(c);
-                        insert_mode = true;
+                        buffer.visible = true;
                         layout.force_redraw = true;
                     } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
