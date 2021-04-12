@@ -18,7 +18,7 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use termion::event::Key;
 use termion::input::TermRead;
 use buffer::Buffer;
-use clock::Clock;
+use clock::{Clock, font};
 use layout::Layout;
 use alarm::{Countdown, exec_command};
 pub use alarm::AlarmRoster;
@@ -41,8 +41,7 @@ pub fn run(
     spawned: &mut Option<process::Child>,
 ) -> Result<(), std::io::Error>
 {
-    let mut layout = Layout::new(&config);
-    layout.force_recalc = sigwinch;
+    let mut layout = Layout::new(sigwinch);
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
     let mut clock = Clock::new(&config);
@@ -336,8 +335,8 @@ pub fn run(
 }
 
 pub struct Config {
-    plain: bool,
     quit: bool,
+    font: &'static font::Font,
     command: Option<Vec<String>>,
 }
 
@@ -347,8 +346,8 @@ impl Config {
         -> Result<Config, String>
     {
         let mut config = Config {
-            plain: false,
             quit: false,
+            font: &font::NORMAL,
             command: None,
         };
         let mut iter = args.skip(1);
@@ -365,7 +364,8 @@ impl Config {
                         println!("{} {}", NAME, VERSION);
                         process::exit(0);
                     },
-                    "-p" | "--plain" => config.plain = true,
+                    "-p" | "--plain" => config.font = &font::PLAIN,
+                    "-f" | "--fancy" => config.font = &font::CHROME,
                     "-q" | "--quit" => config.quit = true,
                     "-e" | "--exec" => {
                         if let Some(e) = iter.next() {

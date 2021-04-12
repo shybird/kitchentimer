@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::Config;
 use crate::clock::Clock;
 
 pub struct Position {
@@ -11,7 +10,6 @@ pub struct Position {
 pub struct Layout {
     pub force_redraw: bool, // Redraw elements on screen.
     pub force_recalc: Arc<AtomicBool>, // Recalculate position of elements.
-    pub plain: bool, // Plain style clock.
     pub width: u16,
     pub height: u16,
     clock_width: u16,
@@ -30,12 +28,11 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn new(config: &Config) -> Layout {
+    pub fn new(sigwinch: Arc<AtomicBool>) -> Layout {
         Layout {
             force_redraw: true,
             // May be set by signal handler (SIGWINCH).
-            force_recalc: Arc::new(AtomicBool::new(true)),
-            plain: config.plain,
+            force_recalc: sigwinch,
             width: 0,
             height: 0,
             clock_width: 0,

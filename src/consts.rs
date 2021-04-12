@@ -1,11 +1,11 @@
 
 pub const COLOR: [&dyn termion::color::Color; 6] = [
-    &termion::color::Cyan,
-    &termion::color::Magenta,
-    &termion::color::Green,
-    &termion::color::Yellow,
-    &termion::color::Blue,
-    &termion::color::Red,
+    &termion::color::LightGreen,
+    &termion::color::LightYellow,
+    &termion::color::LightMagenta,
+    &termion::color::LightCyan,
+    &termion::color::LightRed,
+    &termion::color::LightBlue,
 ];
 
 // Maximum length of labels.
@@ -27,7 +27,8 @@ OPTIONS:
   -e, --exec [COMMAND]  Execute COMMAND on alarm. Occurrences of {t} will
                         be replaced by the alarm time in (HH:)MM:SS format.
                         Occurrences of {l} by alarm label.
-  -p, --plain           Use simpler block chars.
+  -p, --plain           Use simpler block chars to draw the clock.
+  -f, --fancy           Use fancy clock style.
   -q, --quit            Quit program after last alarm.
 
 SIGNALS: <SIGUSR1> Reset clock.

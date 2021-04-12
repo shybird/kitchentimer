@@ -15,7 +15,7 @@ pub struct Clock {
     pub paused: bool,
     paused_at: Option<time::Instant>,
     pub color_index: Option<usize>,
-    pub font: font::Font,
+    pub font: &'static font::Font,
 }
 
 impl Clock {
@@ -27,10 +27,7 @@ impl Clock {
             paused: false,
             paused_at: None,
             color_index: None,
-            font: match config.plain {
-                false => font::NORMAL,
-                true => font::PLAIN,
-            },
+            font: config.font,
         }
     }
 

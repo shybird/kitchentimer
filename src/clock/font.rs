@@ -162,8 +162,7 @@ pub const PLAIN: Font = Font {
         ]],
 };
 
-/*
-pub const FANCE: Font = Font {
+pub const CHROME: Font = Font {
     height: DIGIT_HEIGHT,
     width: 5,
     dot: '■',
@@ -239,4 +238,4 @@ pub const FANCE: Font = Font {
         "    🮐"
         ]],
 };
-*/
+
