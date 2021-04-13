@@ -1,5 +1,4 @@
 use std::{env, process};
-use std::io::Write;
 use kitchentimer::{Config, AlarmRoster, run};
 
 
@@ -18,18 +17,17 @@ fn main() {
 
     // Run main loop.
     if let Err(e) = run(config, alarm_roster, &mut spawned) {
-        println!("Main loop exited with error: {}", e);
+        eprintln!("Main loop exited with error: {}", e);
         process::exit(1);
     }
 
     // Wait for remaining spawned processes to exit.
     if let Some(ref mut child) = spawned {
-        print!("Waiting for spawned process (PID {}) to exit ...", child.id());
-        std::io::stdout().flush().unwrap();
+        eprint!("Waiting for spawned process (PID {}) to exit ...", child.id());
 
         match child.wait() {
-            Ok(status) => println!(" ok ({})", status),
-            Err(error) => println!(" failed ({})", error),
+            Ok(status) => eprintln!(" ok ({})", status),
+            Err(error) => eprintln!(" failed ({})", error),
         }
     }
 }
