@@ -224,7 +224,8 @@ impl AlarmRoster {
     pub fn draw<W: Write>(
         &self,
         stdout: &mut RawTerminal<W>,
-        layout: &mut Layout
+        layout: &mut Layout,
+        config: &Config,
     ) -> Result<(), std::io::Error>
     {
         let mut index = 0;
@@ -242,26 +243,55 @@ impl AlarmRoster {
                 "{}{}[...]{}",
                 cursor::Goto(layout.roster.col, layout.roster.line),
                 style::Faint,
-                style::Reset)?;
+                style::Reset,
+            )?;
         }
 
         for alarm in &self.list[first..] {
-            if alarm.exceeded {
-                write!(stdout,
-                    "{}{} {}{} {}!{}",
-                    cursor::Goto(layout.roster.col, layout.roster.line + index),
-                    color::Bg(COLOR[alarm.color_index]),
-                    color::Bg(color::Reset),
-                    style::Bold,
-                    &alarm.label,
-                    style::Reset)?;
-            } else {
-                write!(stdout,
-                    "{}{} {} {}",
-                    cursor::Goto(layout.roster.col, layout.roster.line + index),
-                    color::Bg(COLOR[alarm.color_index]),
-                    color::Bg(color::Reset),
-                    &alarm.label)?;
+            match alarm.exceeded {
+                true if config.fancy => {
+                    write!(stdout,
+                        "{}{}{}{} {} {}🭬{}{}",
+                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        color::Fg(COLOR[alarm.color_index]),
+                        style::Bold,
+                        style::Invert,
+                        &alarm.label,
+                        style::NoInvert,
+                        color::Fg(color::Reset),
+                        style::Reset,
+                    )?;
+                },
+                false if config.fancy => {
+                    write!(stdout,
+                        "{}{}█🭬{}{}",
+                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        color::Fg(COLOR[alarm.color_index]),
+                        color::Fg(color::Reset),
+                        &alarm.label,
+                    )?;
+                },
+                true => {
+                    write!(stdout,
+                        "{}{}{}{} {} {}{}",
+                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        color::Fg(COLOR[alarm.color_index]),
+                        style::Bold,
+                        style::Invert,
+                        &alarm.label,
+                        color::Fg(color::Reset),
+                        style::Reset,
+                    )?;
+                },
+                false => {
+                    write!(stdout,
+                        "{}{} {} {}",
+                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        color::Bg(COLOR[alarm.color_index]),
+                        color::Bg(color::Reset),
+                        &alarm.label,
+                    )?;
+                },
             }
             index += 1;
         }

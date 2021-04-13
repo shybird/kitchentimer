@@ -157,7 +157,7 @@ pub fn run(
                     style::NoFaint)?;
 
                 // Redraw list of alarms.
-                alarm_roster.draw(&mut stdout, &mut layout)?;
+                alarm_roster.draw(&mut stdout, &mut layout, &config)?;
 
                 // Redraw buffer.
                 buffer.draw(&mut stdout, &mut layout)?;
@@ -306,18 +306,20 @@ pub fn run(
         }
     }
 
-    // Main loop exited. Clear window and restore cursor.
+    // Main loop exited. Clear screen and restore cursor.
     write!(stdout,
         "{}{}{}",
-        clear::BeforeCursor,
-        cursor::Goto(1, 1),
+        clear::All,
+        cursor::Restore,
         cursor::Show)?;
+    stdout.flush()?;
 
     Ok(())
 }
 
 pub struct Config {
     quit: bool,
+    fancy: bool,
     font: &'static font::Font,
     command: Option<Vec<String>>,
 }
@@ -329,6 +331,7 @@ impl Config {
     {
         let mut config = Config {
             quit: false,
+            fancy: false,
             font: &font::NORMAL,
             command: None,
         };
@@ -347,7 +350,10 @@ impl Config {
                         process::exit(0);
                     },
                     "-p" | "--plain" => config.font = &font::PLAIN,
-                    "-f" | "--fancy" => config.font = &font::CHROME,
+                    "-f" | "--fancy" => {
+                        config.fancy = true;
+                        config.font = &font::CHROME;
+                    },
                     "-q" | "--quit" => config.quit = true,
                     "-e" | "--exec" => {
                         if let Some(e) = iter.next() {
