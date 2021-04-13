@@ -168,20 +168,23 @@ impl Clock {
     }
 
     fn draw_digit_pair<W: Write>(
-        &self,
+        &mut self,
         stdout: &mut RawTerminal<W>,
         value: u32,
         pos: &Position,
     ) -> Result<(), std::io::Error>
     {
+        let left = value / 10;
+        let right = value % 10;
+
         for l in 0..self.font.height {
             write!(stdout,
                 "{}{} {}",
                 cursor::Goto(pos.col, pos.line + l),
                 // First digit.
-                self.font.digits[(value / 10) as usize][l as usize],
+                self.font.digits[left as usize][l as usize],
                 // Second digit.
-                self.font.digits[(value % 10) as usize][l as usize]
+                self.font.digits[right as usize][l as usize]
             )?;
         }
         Ok(())
