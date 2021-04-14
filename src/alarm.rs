@@ -316,34 +316,58 @@ impl AlarmRoster {
             alarm.reset();
         }
     }
+
+    // Read alarm times from stdin.
+    pub fn from_stdin(&mut self, stdin: std::io::Stdin)
+        -> Result<(), String>
+    {
+        let mut buffer = String::new();
+        loop {
+            match stdin.read_line(&mut buffer) {
+                Ok(0) => break, // EOF.
+                Ok(1) => continue, // Empty (newline only).
+                Ok(_) => (),
+                Err(e) => return Err(e.to_string()),
+            }
+            // Strip newline.
+            buffer.retain(|c| c != '\n');
+            // Ignore lines containing only white spaces.
+            if buffer.contains(|c: char| !c.is_whitespace()) {
+                if let Err(e) = self.add(&buffer) {
+                    return Err(e.to_string());
+                }
+            }
+            buffer.clear();
+        }
+        Ok(())
+    }
 }
 
 // Execute the command given on the command line.
-pub fn exec_command(config: &Config, elapsed: u32, label: &String) -> Option<Child> {
-    let mut args: Vec<String> = Vec::new();
-    let time: String;
-
-    if elapsed < 3600 {
-        time = format!("{:02}:{:02}", elapsed / 60, elapsed % 60);
+pub fn exec_command(command: &Vec<String>, elapsed: u32, label: &String) -> Option<Child> {
+    let time = if elapsed < 3600 {
+        format!("{:02}:{:02}", elapsed / 60, elapsed % 60)
     } else {
-        time = format!("{:02}:{:02}:{:02}", elapsed /3600, (elapsed / 60) % 60, elapsed % 60);
+        format!("{:02}:{:02}:{:02}", elapsed /3600, (elapsed / 60) % 60, elapsed % 60)
+    };
+
+    let mut args: Vec<String> = Vec::new();
+    // Build vector of command line arguments. Replace every occurrence of
+    // "{t}" and "{l}".
+    for s in command.iter().skip(1) {
+        args.push(s.replace("{t}", &time).replace("{l}", &label));
     }
 
-    if let Some(command) = &config.command {
-        // Replace every occurrence of "{}".
-        args.reserve_exact(command.len());
-        for s in command {
-            args.push(s.replace("{t}", &time).replace("{l}", &label));
-        }
-
-        match Command::new(&command[0]).args(&args[1..])
-            .stdout(Stdio::null()).stdin(Stdio::null()).spawn() {
-            Ok(child) => return Some(child),
-            Err(error) => {
-                eprintln!("Error: Could not execute command. ({})", error);
-            }
+    match Command::new(&command[0])
+        .args(args)
+        .stdout(Stdio::null())
+        .stdin(Stdio::null())
+        .spawn() {
+        Ok(child) => Some(child),
+        Err(error) => {
+            eprintln!("Error: Could not execute command. ({})", error);
+            None
         }
     }
-    None
 }
 

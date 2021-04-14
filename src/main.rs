@@ -12,6 +12,16 @@ fn main() {
             process::exit(1);
         });
 
+    // Read alarm times from stdin if stdin not a tty.
+    let stdin = std::io::stdin();
+    if !termion::is_tty(&stdin) {
+        stdin.lock();
+        if let Err(e) = alarm_roster.from_stdin(stdin) {
+            eprintln!("Error while reading alarm times from stdin. ({})", e);
+            process::exit(1);
+        }
+    }
+
     // Holds spawned child process if any.
     let mut spawned: Option<process::Child> = None;
 

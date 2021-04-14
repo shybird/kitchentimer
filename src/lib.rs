@@ -38,6 +38,7 @@ pub fn run(
     let mut clock = Clock::new(&config);
     let mut countdown = Countdown::new();
     let mut buffer = Buffer::new();
+
     let async_stdin = termion::async_stdin();
     let mut input_keys = async_stdin.keys();
     let stdout = std::io::stdout();
@@ -119,19 +120,17 @@ pub fn run(
                 write!(stdout, "{}", 0x07 as char)?;
                 layout.force_redraw = true;
 
-                // Run command if configured.
-                if config.command.is_some() {
-                    if spawned.is_none() {
-                        *spawned = exec_command(&config, time, &label);
-                    } else {
-                        // The last command is still running.
-                        eprintln!("Not executing command, as its predecessor is still running");
-                    }
+                match config.command {
+                    // Run command if configured and no command is running.
+                    Some(ref command) if spawned.is_none() => {
+                        *spawned = exec_command(command, time, &label);
+                    },
+                    // Last command is still running.
+                    Some(_) => eprintln!("Not executing command, as its predecessor is still running"),
+                    None => (),
                 }
                 // Quit if configured.
-                if config.quit && alarm_roster.idle() {
-                    break;
-                }
+                if config.quit && alarm_roster.idle() { break };
             }
 
             // Clear the window and redraw menu bar, alarm roster and buffer if
