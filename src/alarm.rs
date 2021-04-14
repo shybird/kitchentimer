@@ -8,6 +8,10 @@ use crate::layout::{Layout, Position};
 use crate::utils::*;
 use crate::consts::{COLOR, LABEL_SIZE_LIMIT};
 
+// Delimiter between time and label. Remember to update usage information in
+// consts.rs when changing this.
+const DELIMITER: char = '/';
+
 
 pub struct Countdown {
     pub value: u32,
@@ -24,6 +28,7 @@ impl Countdown {
 
     pub fn reset(&mut self) {
         self.value = 0;
+        self.position = None;
     }
 
     // Draw countdown.
@@ -88,7 +93,7 @@ impl AlarmRoster {
         let mut label: String;
         let time_str: &str;
 
-        if let Some(i) = input.find('/') {
+        if let Some(i) = input.find(DELIMITER) {
             label = input[(i + 1)..].to_string();
             // Truncate label.
             unicode_truncate(&mut label, LABEL_SIZE_LIMIT);
@@ -101,15 +106,18 @@ impl AlarmRoster {
         // Parse input into seconds.
         if time_str.contains(':') {
             for sub in time_str.rsplit(':') {
-                if !sub.is_empty() {
-                    match sub.parse::<u32>() {
-                        // Valid.
-                        Ok(d) if d < 60 && index < 3 => time += d * 60u32.pow(index),
-                        // Passes as u32, but does not fit into time range.
-                        Ok(_) => return Err("Could not parse value as time."),
-                        // Could not parse to u32.
-                        Err(_) => return Err("Could not parse value as integer."),
-                    }
+                match sub.parse::<u32>() {
+                    // Valid.
+                    Ok(d) if d < 60 && index < 3 => time += d * 60u32.pow(index),
+                    // Passes as u32, but does not fit into time range.
+                    Ok(_) => return Err("Could not parse value as time."),
+                    // Ignore failure caused by an empty string.
+                    // TODO: Match error kind when stable. See documentation
+                    // for std::num::ParseIntError and
+                    // https://github.com/rust-lang/rust/issues/22639
+                    Err(_) if sub.is_empty() => (),
+                    // Could not parse to u32.
+                    Err(_) => return Err("Could not parse value as integer."),
                 }
                 index += 1;
             }
@@ -124,7 +132,12 @@ impl AlarmRoster {
         // Skip if time is out of boundaries.
         if time == 0 { return Err("Evaluates to zero.") };
         if time >= 24 * 60 * 60 { return Err("Values >24h not supported.") };
+        // Filter out double entries.
+        if self.list.iter().any(|a| a.time == time) {
+            return Err("Already exists.");
+        }
 
+        // Label will never change from now on.
         label.shrink_to_fit();
         let alarm = Alarm {
             label,
@@ -133,21 +146,11 @@ impl AlarmRoster {
             exceeded: false,
         };
 
-        // Add to list, insert based on alarm time. Disallow double entries.
-        let mut i = self.list.len();
-        if i == 0 {
-            self.list.push(alarm);
-        } else {
-            while i > 0 {
-                // Filter out double entries.
-                if self.list[i - 1].time == time {
-                    return Err("Already exists.");
-                } else if self.list[i - 1].time < time {
-                    break;
-                }
-                i -= 1;
-            }
+        // Add to list, insert based on alarm time.
+        if let Some(i) = self.list.iter().position(|a| a.time > time) {
             self.list.insert(i, alarm);
+        } else {
+            self.list.push(alarm);
         }
         Ok(())
     }
@@ -170,52 +173,47 @@ impl AlarmRoster {
     ) -> Option<(u32, &String)>
     {
         let mut ret = None;
-        let mut index = 0;
         let size = self.list.len() as u16;
 
-        for alarm in &mut self.list {
+        for (index, alarm) in self.list.iter_mut().enumerate()
             // Ignore alarms marked exceeded.
-            if !alarm.exceeded {
-                if alarm.time <= clock.elapsed {
-                    // Found alarm to raise.
-                    ret = Some((alarm.time, &alarm.label));
-                    alarm.exceeded = true;
-                    clock.color_index = Some(alarm.color_index);
-                    countdown.value = 0;
-                    countdown.position = None;
-                    // Skip ahead to the next one.
-                    index += 1;
-                    continue;
-                }
-                // Reached the alarm to exceed next. Update countdown
-                // accordingly.
-                countdown.value = alarm.time - clock.elapsed;
-                if countdown.position.is_none() || layout.force_redraw {
-                    // Compute position.
-                    let mut col =
-                        layout.roster.col
-                        + 3
-                        + unicode_length(&alarm.label);
-                    let mut line = layout.roster.line + index;
+            .filter(|(_, a)| !a.exceeded) {
 
-                    // Compensate for "hidden" items in the alarm roster.
-                    // TODO: Make this more elegant and robust.
-                    if let Some(offset) = size.checked_sub(layout.roster_height + 1) {
-                        if index <= offset{
-                            // Draw next to placeholder ("[...]").
-                            line = layout.roster.line;
-                            col = layout.roster.col + 6;
-                        } else {
-                            line = line.checked_sub(offset)
-                                .unwrap_or(layout.roster.line);
-                        }
-                    }
-                    countdown.position = Some(Position { col, line, });
-                }
-                // Ignore other alarms.
-                break;
+            if alarm.time <= clock.elapsed {
+                // Found alarm to raise.
+                ret = Some((alarm.time, &alarm.label));
+                alarm.exceeded = true;
+                clock.color_index = Some(alarm.color_index);
+                countdown.reset();
+                // Skip ahead to the next one.
+                continue;
             }
-            index += 1;
+            // Reached the alarm to exceed next. Update countdown accordingly.
+            countdown.value = alarm.time - clock.elapsed;
+            if countdown.position.is_none() || layout.force_redraw {
+                // Compute position.
+                let mut col =
+                    layout.roster.col
+                    + 3
+                    + unicode_length(&alarm.label);
+                let mut line = layout.roster.line + index as u16;
+
+                // Compensate for "hidden" items in the alarm roster.
+                // TODO: Make this more elegant and robust.
+                if let Some(offset) = size.checked_sub(layout.roster_height + 1) {
+                    if index as u16 <= offset{
+                        // Draw next to placeholder ("[...]").
+                        line = layout.roster.line;
+                        col = layout.roster.col + 6;
+                    } else {
+                        line = line.checked_sub(offset)
+                            .unwrap_or(layout.roster.line);
+                    }
+                }
+                countdown.position = Some(Position { col, line, });
+            }
+            // Ignore other alarms.
+            break;
         }
         ret // Return value.
     }
@@ -228,16 +226,13 @@ impl AlarmRoster {
         config: &Config,
     ) -> Result<(), std::io::Error>
     {
-        let mut index = 0;
-
-        // Find first item to print in case we lack space to print them all.
-        // Final '-1' to take account for the input buffer.
-        let mut first = 0;
+        // Find first item to print in case we lack the space to print them
+        // all. Final '-1' to take account for the input buffer.
+        let mut offset = 0;
 
         if self.list.len() > layout.roster_height as usize {
-            // Actually -1 (zero indexing) +1 (first line containing "...").
-            first = self.list.len() - layout.roster_height as usize;
-            index += 1;
+            // Actually -1 (zero indexing) +1 (first line containing "[...]").
+            offset = self.list.len() - layout.roster_height as usize;
 
             write!(stdout,
                 "{}{}[...]{}",
@@ -247,12 +242,19 @@ impl AlarmRoster {
             )?;
         }
 
-        for alarm in &self.list[first..] {
+        for (i, alarm) in self.list.iter().skip(offset).enumerate() {
+            let line = if offset > 0 {
+                // Add offset of one for "[...]".
+                layout.roster.line + i as u16 + 1
+            } else {
+                layout.roster.line + i as u16
+            };
+
             match alarm.exceeded {
                 true if config.fancy => {
                     write!(stdout,
                         "{}{}{}{} {} {}🭬{}{}",
-                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        cursor::Goto(layout.roster.col, line),
                         color::Fg(COLOR[alarm.color_index]),
                         style::Bold,
                         style::Invert,
@@ -265,7 +267,7 @@ impl AlarmRoster {
                 false if config.fancy => {
                     write!(stdout,
                         "{}{}█🭬{}{}",
-                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        cursor::Goto(layout.roster.col, line),
                         color::Fg(COLOR[alarm.color_index]),
                         color::Fg(color::Reset),
                         &alarm.label,
@@ -274,7 +276,7 @@ impl AlarmRoster {
                 true => {
                     write!(stdout,
                         "{}{}{}{} {} {}{}",
-                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        cursor::Goto(layout.roster.col, line),
                         color::Fg(COLOR[alarm.color_index]),
                         style::Bold,
                         style::Invert,
@@ -286,14 +288,13 @@ impl AlarmRoster {
                 false => {
                     write!(stdout,
                         "{}{} {} {}",
-                        cursor::Goto(layout.roster.col, layout.roster.line + index),
+                        cursor::Goto(layout.roster.col, line),
                         color::Bg(COLOR[alarm.color_index]),
                         color::Bg(color::Reset),
                         &alarm.label,
                     )?;
                 },
             }
-            index += 1;
         }
         Ok(())
     }

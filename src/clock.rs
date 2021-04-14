@@ -92,7 +92,7 @@ impl Clock {
 
     // Draw clock according to layout.
     pub fn draw<W: Write>(
-        &mut self,
+        &self,
         mut stdout: &mut RawTerminal<W>,
         layout: &Layout,
     ) -> Result<(), std::io::Error>
@@ -105,18 +105,21 @@ impl Clock {
             write!(stdout, "{}", color::Fg(COLOR[c]))?;
         }
 
-        // Draw hours if necessary.
+        // Run once every hour or on request.
         if layout.force_redraw || self.elapsed % 3600 == 0 {
+            // Draw hours if necessary.
             if self.elapsed >= 3600 {
                 self.draw_digit_pair(
                     &mut stdout,
                     self.elapsed / 3600,
-                    &layout.clock_hr)?;
+                    &layout.clock_hr,
+                )?;
 
                 // Draw colon.
                 self.draw_colon(
                     &mut stdout,
-                    &layout.clock_colon1)?;
+                    &layout.clock_colon1,
+                )?;
             }
 
             // Draw days.
@@ -124,7 +127,8 @@ impl Clock {
                 let day_count = format!(
                     "+ {} {}",
                     self.days,
-                    if self.days == 1 { "DAY" } else { "DAYS" });
+                    if self.days == 1 { "DAY" } else { "DAYS" },
+                );
 
                 write!(stdout,
                     "{}{:>11}",
@@ -132,61 +136,65 @@ impl Clock {
                         layout.clock_days.col,
                         layout.clock_days.line,
                     ),
-                    day_count)?;
+                    day_count,
+                )?;
             }
         }
 
-        // Draw minutes if necessary.
+        // Draw minutes if necessary. Once every minute or on request.
         if layout.force_redraw || self.elapsed % 60 == 0 {
             self.draw_digit_pair(
                 &mut stdout,
                 (self.elapsed % 3600) / 60,
-                &layout.clock_min)?;
+                &layout.clock_min,
+            )?;
         }
 
         // Draw colon if necessary.
         if layout.force_redraw {
             self.draw_colon(
                 &mut stdout,
-                &layout.clock_colon0)?;
+                &layout.clock_colon0,
+            )?;
         }
 
         // Draw seconds.
         self.draw_digit_pair(
             &mut stdout,
             self.elapsed % 60,
-            &layout.clock_sec)?;
+            &layout.clock_sec,
+        )?;
 
         // Reset color and style.
         if self.paused || self.color_index != None {
             write!(stdout,
                 "{}{}",
                 style::NoFaint,
-                color::Fg(color::Reset))?;
+                color::Fg(color::Reset),
+            )?;
         }
         Ok(())
     }
 
     fn draw_digit_pair<W: Write>(
-        &mut self,
+        &self,
         stdout: &mut RawTerminal<W>,
         value: u32,
         pos: &Position,
     ) -> Result<(), std::io::Error>
     {
-        let left = value / 10;
-        let right = value % 10;
+        let left = self.font.digits[value as usize / 10].iter();
+        let right = self.font.digits[value as usize % 10].iter();
 
-        for l in 0..self.font.height {
+        for (i, (left, right)) in left.zip(right).enumerate() {
             write!(stdout,
                 "{}{} {}",
-                cursor::Goto(pos.col, pos.line + l),
-                // First digit.
-                self.font.digits[left as usize][l as usize],
-                // Second digit.
-                self.font.digits[right as usize][l as usize]
+                cursor::Goto(pos.col, pos.line + i as u16),
+                left,
+                right,
             )?;
         }
+
         Ok(())
     }
 

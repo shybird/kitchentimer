@@ -8,7 +8,7 @@ fn main() {
     // Parse command line arguments into config and alarm roster.
     let config = Config::new(args, &mut alarm_roster)
         .unwrap_or_else(|e| {
-            println!("{}", e);
+            eprintln!("{}", e);
             process::exit(1);
         });
 
