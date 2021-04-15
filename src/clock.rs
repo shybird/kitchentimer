@@ -207,9 +207,9 @@ impl Clock {
         write!(stdout,
             "{}{}{}{}",
             cursor::Goto(pos.col, pos.line + 1),
-            self.font.dot,
+            self.font.dots.0,
             cursor::Goto(pos.col, pos.line + 3),
-            self.font.dot,
+            self.font.dots.1,
         )?;
         Ok(())
     }

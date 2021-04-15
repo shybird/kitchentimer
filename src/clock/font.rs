@@ -4,14 +4,14 @@ const DIGIT_HEIGHT: u16 = 5;
 pub struct Font {
     pub height: u16,
     pub width: u16,
-    pub dot: char,
+    pub dots: (char, char),
     pub digits: [[&'static str; DIGIT_HEIGHT as usize]; 10],
 }
 
 pub const NORMAL: Font = Font {
     height: DIGIT_HEIGHT,
     width: 5,
-    dot: '■',
+    dots: ('■', '■'),
     digits: [[
         // 0
         "█▀▀▀█",
@@ -88,7 +88,7 @@ pub const NORMAL: Font = Font {
 pub const PLAIN: Font = Font {
     height: DIGIT_HEIGHT,
     width: 5,
-    dot: '█',
+    dots: ('█', '█'),
     digits: [[
         // 0
         "█████",
@@ -165,7 +165,7 @@ pub const PLAIN: Font = Font {
 pub const CHROME: Font = Font {
     height: DIGIT_HEIGHT,
     width: 5,
-    dot: '■',
+    dots: ('▄', '🮏'),
     digits: [[
         // 0
         "█▀▀▀█",
