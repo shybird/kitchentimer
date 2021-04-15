@@ -8,12 +8,18 @@ use crate::consts::COLOR;
 use crate::Config;
 use crate::layout::{Layout, Position};
 
+enum Pause {
+    Instant(time::Instant),
+    Secs(u32),
+    None,
+}
+
 pub struct Clock {
     pub start: time::Instant,
     pub elapsed: u32,
     pub days: u32,
     pub paused: bool,
-    paused_at: Option<time::Instant>,
+    paused_at: Pause,
     pub color_index: Option<usize>,
     pub font: &'static font::Font,
 }
@@ -25,7 +31,7 @@ impl Clock {
             elapsed: 0,
             days: 0,
             paused: false,
-            paused_at: None,
+            paused_at: Pause::None,
             color_index: None,
             font: config.font,
         }
@@ -44,19 +50,24 @@ impl Clock {
     }
 
     fn pause(&mut self) {
-        self.paused_at = Some(time::Instant::now());
+        self.paused_at = Pause::Instant(time::Instant::now());
         self.paused = true;
     }
 
     fn unpause(&mut self) {
-        // Try to derive a new start instant.
-        if let Some(delay) = self.paused_at {
-            if let Some(new_start) = self.start.checked_add(delay.elapsed()) {
-                self.start = new_start;
-            }
+        match self.paused_at {
+            Pause::Instant(delay) => {
+                if let Some(start) = self.start.checked_add(delay.elapsed()) {
+                    self.start = start;
+                }
+            },
+            Pause::Secs(secs) => {
+                self.start = time::Instant::now() - time::Duration::from_secs(secs as u64);
+            },
+            Pause::None => (), // O_o
         }
 
-        self.paused_at = None;
+        self.paused_at = Pause::None;
         self.paused = false;
     }
 
@@ -66,6 +77,16 @@ impl Clock {
         } else {
             self.pause();
         }
+    }
+
+    pub fn shift(&mut self, shift: i32) {
+        let secs = if shift.is_negative() {
+            self.elapsed.saturating_sub(shift.abs() as u32)
+        } else {
+            self.elapsed.saturating_add(shift as u32)
+        };
+        self.paused_at = Pause::Secs(secs);
+        self.elapsed = secs;
     }
 
     pub fn get_width(&self) -> u16 {
@@ -95,6 +116,7 @@ impl Clock {
         &self,
         mut stdout: &mut RawTerminal<W>,
         layout: &Layout,
+        force_redraw: bool,
     ) -> Result<(), std::io::Error>
     {
         // Setup style and color if appropriate.
@@ -106,7 +128,7 @@ impl Clock {
         }
 
         // Run once every hour or on request.
-        if layout.force_redraw || self.elapsed % 3600 == 0 {
+        if force_redraw || self.elapsed % 3600 == 0 {
             // Draw hours if necessary.
             if self.elapsed >= 3600 {
                 self.draw_digit_pair(
@@ -142,7 +164,7 @@ impl Clock {
         }
 
         // Draw minutes if necessary. Once every minute or on request.
-        if layout.force_redraw || self.elapsed % 60 == 0 {
+        if force_redraw || self.elapsed % 60 == 0 {
             self.draw_digit_pair(
                 &mut stdout,
                 (self.elapsed % 3600) / 60,
@@ -151,7 +173,7 @@ impl Clock {
         }
 
         // Draw colon if necessary.
-        if layout.force_redraw {
+        if force_redraw {
             self.draw_colon(
                 &mut stdout,
                 &layout.clock_colon0,

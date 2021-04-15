@@ -39,5 +39,7 @@ SIGNALS: <SIGUSR1> Reset clock.
     "[0-9] Add  [d] Delete  [SPACE] Pause  [r] Reset  [c] Clear  [q] Quit";
     pub const MENUBAR_INS: &str =
     "Format: HH:MM:SS/LABEL  [ENTER] Accept  [ESC] Cancel  [CTR-C] Quit";
+    pub const MENUBAR_PAUSED: &str =
+    "[SPACE] Continue  [r] Reset  [UP]/[DOWN] Set clock";
 }
 

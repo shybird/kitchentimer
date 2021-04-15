@@ -43,6 +43,7 @@ pub fn run(
     let mut input_keys = async_stdin.keys();
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock().into_raw_mode()?;
+    let mut force_redraw = true;
 
     // Register signals.
     let mut signals = Signals::new(&[
@@ -65,22 +66,22 @@ pub fn run(
                 // Continuing after SIGTSTP or SIGSTOP.
                 SIGCONT => {
                     restore_after_suspend(&mut stdout)?;
-                    layout.force_redraw = true;
+                    force_redraw = true;
                 },
-                SIGWINCH => layout.force_recalc = true,
+                SIGWINCH => layout.schedule_recalc(),
                 // Exit main loop on SIGTERM and SIGINT.
                 SIGTERM | SIGINT => break 'outer,
                 // Reset clock on SIGUSR1.
                 SIGUSR1 => {
                     clock.reset();
                     alarm_roster.reset_all();
-                    layout.force_recalc = true;
-                    layout.force_redraw = true;
+                    layout.schedule_recalc();
+                    force_redraw = true;
                 },
                 // (Un-)Pause clock on SIGUSR2.
                 SIGUSR2 => {
                     clock.toggle();
-                    layout.force_redraw = true;
+                    force_redraw = true;
                 },
                 // We didn't register anything else.
                 _ => unreachable!(),
@@ -98,7 +99,7 @@ pub fn run(
 
         // Conditional inner loop. Runs once every second or when explicitly
         // requested.
-        if elapsed != clock.elapsed || layout.force_redraw  {
+        if elapsed != clock.elapsed || force_redraw  {
             // Update clock. Advance one day after 24 hours.
             if elapsed < 24 * 60 * 60 {
                 clock.elapsed = elapsed;
@@ -106,36 +107,49 @@ pub fn run(
                 clock.next_day();
                 // "clock.elapsed" set by "clock.next_day()".
                 alarm_roster.reset_all();
-                layout.force_recalc = true;
+                layout.schedule_recalc();
             }
 
             // Update window size information and calculate the clock position.
             // Also enforce recalculation of layout if we start displaying
             // hours.
-            layout.update(&clock, clock.elapsed == 3600)?;
+            match layout.update(&clock, clock.elapsed == 3600) {
+                Ok(true) => force_redraw = true,
+                Ok(false) => (),
+                Err(e) => return Err(e),
+            }
 
             // Check for exceeded alarms.
-            if let Some((time, label)) = alarm_roster.check(&mut clock, &layout, &mut countdown) {
-                // Write ASCII bell code.
-                write!(stdout, "{}", 0x07 as char)?;
-                layout.force_redraw = true;
+            if let Some((time, label)) = alarm_roster.check(
+                &mut clock,
+                &layout,
+                &mut countdown,
+                force_redraw)
+            {
+                // Do not react to exceeded alarms if the clock is paused.
+                if !clock.paused {
+                    force_redraw = true;
 
-                match config.command {
-                    // Run command if configured and no command is running.
-                    Some(ref command) if spawned.is_none() => {
-                        *spawned = exec_command(command, time, &label);
-                    },
-                    // Last command is still running.
-                    Some(_) => eprintln!("Not executing command, as its predecessor is still running"),
-                    None => (),
+                    // Write ASCII bell code.
+                    write!(stdout, "{}", 0x07 as char)?;
+
+                    match config.command {
+                        // Run command if configured and no command is running.
+                        Some(ref command) if spawned.is_none() => {
+                            *spawned = exec_command(command, time, &label);
+                        },
+                        // Last command is still running.
+                        Some(_) => eprintln!("Not executing command, as its predecessor is still running"),
+                        None => (),
+                    }
+                    // Quit if configured.
+                    if config.quit && alarm_roster.idle() { break };
                 }
-                // Quit if configured.
-                if config.quit && alarm_roster.idle() { break };
             }
 
             // Clear the window and redraw menu bar, alarm roster and buffer if
             // requested.
-            if layout.force_redraw {
+            if force_redraw {
                 // Write menu at the top.
                 write!(stdout,
                     "{}{}{}{}{}",
@@ -144,6 +158,7 @@ pub fn run(
                     // Switch menu bars. Use a compressed version or none at
                     // all if necessary.
                     match buffer.visible {
+                        _ if clock.paused && layout.can_hold(MENUBAR_PAUSED) => MENUBAR_PAUSED,
                         true if layout.can_hold(MENUBAR_INS) => MENUBAR_INS,
                         false if layout.can_hold(MENUBAR) => MENUBAR,
                         false if layout.can_hold(MENUBAR_SHORT) => MENUBAR_SHORT,
@@ -162,7 +177,7 @@ pub fn run(
                 buffer.draw(&mut stdout, &mut layout)?;
             }
 
-            clock.draw(&mut stdout, &layout)?;
+            clock.draw(&mut stdout, &layout, force_redraw)?;
 
             // Display countdown.
             if countdown.value > 0 {
@@ -191,7 +206,7 @@ pub fn run(
 
             // End of conditional inner loop.
             // Reset redraw_all and flush stdout.
-            layout.force_redraw = false;
+            force_redraw = false;
             stdout.flush()?;
         }
 
@@ -216,21 +231,21 @@ pub fn run(
                         }
                         buffer.clear();
                         buffer.visible = false;
-                        layout.force_redraw = true;
+                        force_redraw = true;
                     }
                 },
                 // Escape and ^U clear input buffer.
                 Key::Esc | Key::Ctrl('u') => {
                     buffer.reset();
                     buffer.visible = false;
-                    layout.force_redraw = true;
+                    force_redraw = true;
                 },
                 // ^W removes last word.
                 Key::Ctrl('w') => {
                     buffer.strip_word();
                     if buffer.is_empty() {
                         buffer.visible = false;
-                        layout.force_redraw = true;
+                        force_redraw = true;
                     }
                 },
                 // Backspace.
@@ -239,8 +254,24 @@ pub fn run(
                     buffer.strip_char();
                     if buffer.is_empty() {
                         buffer.visible = false;
-                        layout.force_redraw = true;
+                        force_redraw = true;
                     }
+                },
+                // Set clock.
+                Key::Up if clock.paused => {
+                    clock.shift(10);
+                    // We would very likely not detect us passing the hour
+                    // barrier and would panic when trying to draw hours
+                    // without position if we do not schedule a recalculation
+                    // here.
+                    layout.schedule_recalc();
+                    force_redraw = true;
+                },
+                Key::Down if clock.paused => {
+                    clock.shift(-10);
+                    alarm_roster.time_travel(clock.elapsed);
+                    layout.schedule_recalc();
+                    force_redraw = true;
                 },
                 // Forward every char if in insert mode.
                 Key::Char(c) if buffer.visible => {
@@ -250,18 +281,18 @@ pub fn run(
                 Key::Char('r') => {
                     clock.reset();
                     alarm_roster.reset_all();
-                    layout.force_recalc = true;
-                    layout.force_redraw = true;
+                    layout.schedule_recalc();
+                    force_redraw = true;
                 },
                 // (Un-)Pause on space.
                 Key::Char(' ') => {
                     clock.toggle();
-                    layout.force_redraw = true;
+                    force_redraw = true;
                 },
                 // Clear clock color on 'c'.
                 Key::Char('c') => {
                     clock.color_index = None;
-                    layout.force_redraw = true;
+                    force_redraw = true;
                 },
                 // Delete last alarm on 'd'.
                 Key::Char('d') => {
@@ -270,20 +301,20 @@ pub fn run(
                         // manually. It is safe to do it anyway.
                         layout.set_roster_width(alarm_roster.width());
                         countdown.reset();
-                        layout.force_redraw = true;
+                        force_redraw = true;
                     }
                 },
                 // Exit on q and ^C.
                 Key::Char('q') | Key::Ctrl('c') => break,
                 // Force redraw on ^R.
-                Key::Ctrl('r') => layout.force_redraw = true,
+                Key::Ctrl('r') => force_redraw = true,
                 // Suspend an ^Z.
                 Key::Ctrl('z') => {
                     suspend(&mut stdout)?;
                     // Clear SIGCONT, as we have already taken care to reset
                     // the terminal.
                     //signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
-                    layout.force_redraw = true;
+                    force_redraw = true;
                     // Jump to the start of the main loop.
                     continue;
                 },
@@ -291,7 +322,7 @@ pub fn run(
                     if c.is_ascii_digit() {
                         buffer.push(c);
                         buffer.visible = true;
-                        layout.force_redraw = true;
+                        force_redraw = true;
                     } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
                     }
@@ -300,7 +331,7 @@ pub fn run(
                 _ => (),
             }
         } else {
-            // Main loop delay.
+            // Main loop delay. Skipped after key press.
             thread::sleep(time::Duration::from_millis(100));
         }
     }

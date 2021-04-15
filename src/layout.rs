@@ -7,7 +7,7 @@ pub struct Position {
 
 pub struct Layout {
     pub force_redraw: bool, // Redraw elements on screen.
-    pub force_recalc: bool, // Recalculate position of elements.
+    force_recalc: bool, // Recalculate position of elements.
     pub width: u16,
     pub height: u16,
     clock_width: u16,
@@ -48,8 +48,9 @@ impl Layout {
         }
     }
 
+    // Update layout. Returns true when changes were made.
     pub fn update(&mut self, clock: &Clock, force: bool)
-        -> Result<(), std::io::Error>
+        -> Result<bool, std::io::Error>
     {
         if self.force_recalc || force {
             self.force_recalc = false;
@@ -60,9 +61,14 @@ impl Layout {
             self.clock_height = clock.font.height;
             self.digit_width = clock.font.width;
             self.compute(clock.elapsed >= 3600);
-            self.force_redraw = true;
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        Ok(())
+    }
+
+    pub fn schedule_recalc(&mut self) {
+        self.force_recalc = true;
     }
 
     #[cfg(test)]

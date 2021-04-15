@@ -31,6 +31,18 @@ impl Countdown {
         self.position = None;
     }
 
+    pub fn set(&mut self, value: u32) {
+        self.value = value;
+    }
+
+    pub fn set_position(&mut self, position: Position) {
+        self.position = Some(position);
+    }
+
+    pub fn has_position(&self) -> bool {
+        self.position.is_some()
+    }
+
     // Draw countdown.
     pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>)
         -> Result<(), std::io::Error>
@@ -170,6 +182,7 @@ impl AlarmRoster {
         clock: &mut Clock,
         layout: &Layout,
         countdown: &mut Countdown,
+        force_redraw: bool,
     ) -> Option<(u32, &String)>
     {
         let mut ret = None;
@@ -189,8 +202,8 @@ impl AlarmRoster {
                 continue;
             }
             // Reached the alarm to exceed next. Update countdown accordingly.
-            countdown.value = alarm.time - clock.elapsed;
-            if countdown.position.is_none() || layout.force_redraw {
+            countdown.set(alarm.time - clock.elapsed);
+            if !countdown.has_position() || force_redraw {
                 // Compute position.
                 let mut col =
                     layout.roster.col
@@ -210,7 +223,7 @@ impl AlarmRoster {
                             .unwrap_or(layout.roster.line);
                     }
                 }
-                countdown.position = Some(Position { col, line, });
+                countdown.set_position(Position { col, line });
             }
             // Ignore other alarms.
             break;
@@ -314,6 +327,12 @@ impl AlarmRoster {
     pub fn reset_all(&mut self) {
         for alarm in &mut self.list {
             alarm.reset();
+        }
+    }
+
+    pub fn time_travel(&mut self, time: u32) {
+        for alarm in self.list.iter_mut() {
+            alarm.exceeded = alarm.time <= time;
         }
     }
 
