@@ -33,7 +33,7 @@ fn main() {
 
     // Wait for remaining spawned processes to exit.
     if let Some(ref mut child) = spawned {
-        eprint!("Waiting for spawned process (PID {}) to exit ...", child.id());
+        eprint!("Waiting for spawned process (PID {}) to finish ...", child.id());
 
         match child.wait() {
             Ok(status) => eprintln!(" ok ({})", status),

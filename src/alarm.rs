@@ -76,8 +76,8 @@ impl Countdown {
 }
 
 pub struct Alarm {
-    time: u32,
-    label: String,
+    pub time: u32,
+    pub label: String,
     color_index: usize,
     exceeded: bool,
 }
@@ -178,27 +178,28 @@ impl AlarmRoster {
         !self.list.iter().any(|a| !a.exceeded)
     }
 
-    // Check for exceeded alarms.
+    // Find and process exceeded alarms.
     pub fn check(&mut self,
         clock: &mut Clock,
         layout: &Layout,
         countdown: &mut Countdown,
         force_redraw: bool,
-    ) -> Option<(u32, &String)>
+    ) -> Option<&Alarm>
     {
         let mut ret = None;
         let size = self.list.len() as u16;
 
-        for (index, alarm) in self.list.iter_mut().enumerate()
+        for (index, alarm) in self.list.iter_mut()
+            .enumerate()
             // Ignore alarms marked exceeded.
             .filter(|(_, a)| !a.exceeded) {
 
             if alarm.time <= clock.elapsed {
                 // Found alarm to raise.
-                ret = Some((alarm.time, &alarm.label));
                 alarm.exceeded = true;
                 clock.color_index = Some(alarm.color_index);
                 countdown.reset();
+                ret = Some(&*alarm);
                 // Skip ahead to the next one.
                 continue;
             }
@@ -332,9 +333,16 @@ impl AlarmRoster {
     }
 
     // Call when time jumps backwards.
-    pub fn time_travel(&mut self, time: u32) {
+    pub fn time_travel(&mut self, clock: &mut Clock) {
+        clock.color_index = None;
+
         for alarm in self.list.iter_mut() {
-            alarm.exceeded = alarm.time <= time;
+            if alarm.time <= clock.elapsed {
+                alarm.exceeded = true;
+                clock.color_index = Some(alarm.color_index);
+            } else {
+                alarm.exceeded = false;
+            }
         }
     }
 
@@ -344,21 +352,22 @@ impl AlarmRoster {
     {
         let mut buffer = String::new();
         loop {
+            buffer.clear();
             match stdin.read_line(&mut buffer) {
                 Ok(0) => break, // EOF.
                 Ok(1) => continue, // Empty (newline only).
+                Ok(_) if buffer.starts_with('#') => continue,
                 Ok(_) => (),
                 Err(e) => return Err(e.to_string()),
             }
             // Strip newline.
-            buffer.retain(|c| c != '\n');
+            if buffer.ends_with('\n') { buffer.pop(); }
             // Ignore lines containing only white spaces.
             if buffer.contains(|c: char| !c.is_whitespace()) {
                 if let Err(e) = self.add(&buffer) {
-                    return Err(e.to_string());
+                    return Err(format!("Value \"{}\": {}",buffer, e));
                 }
             }
-            buffer.clear();
         }
         Ok(())
     }

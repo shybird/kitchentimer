@@ -119,8 +119,29 @@ pub fn run(
                 Err(e) => return Err(e),
             }
 
+            // Check on last spawned child process prior to processing the
+            // alarm roster and possibly starting a new one.
+            if let Some(ref mut child) = spawned {
+                match child.try_wait() {
+                    // Process exited successfully.
+                    Ok(Some(status)) if status.success() => *spawned = None,
+                    // Abnormal exit.
+                    Ok(Some(status)) => {
+                        eprintln!("Spawned process terminated with non-zero exit status. ({})", status);
+                        *spawned = None;
+                    },
+                    // Process is still running.
+                    Ok(None) => (),
+                    // Other error.
+                    Err(error) => {
+                        eprintln!("Error executing command. ({})", error);
+                        *spawned = None;
+                    },
+                }
+            }
+
             // Check for exceeded alarms.
-            if let Some((time, label)) = alarm_roster.check(
+            if let Some(alarm) = alarm_roster.check(
                 &mut clock,
                 &layout,
                 &mut countdown,
@@ -136,7 +157,7 @@ pub fn run(
                     match config.command {
                         // Run command if configured and no command is running.
                         Some(ref command) if spawned.is_none() => {
-                            *spawned = exec_command(command, time, &label);
+                            *spawned = exec_command(command, alarm.time, &alarm.label);
                         },
                         // Last command is still running.
                         Some(_) => eprintln!("Not executing command, as its predecessor is still running"),
@@ -182,26 +203,6 @@ pub fn run(
             // Display countdown.
             if countdown.value > 0 {
                 countdown.draw(&mut stdout)?;
-            }
-
-            // Check any spawned child process.
-            if let Some(ref mut child) = spawned {
-                match child.try_wait() {
-                    // Process exited successfully.
-                    Ok(Some(status)) if status.success() => *spawned = None,
-                    // Abnormal exit.
-                    Ok(Some(status)) => {
-                        eprintln!("Spawned process terminated with non-zero exit status. ({})", status);
-                        *spawned = None;
-                    },
-                    // Process is still running.
-                    Ok(None) => (),
-                    // Other error.
-                    Err(error) => {
-                        eprintln!("Error executing command. ({})", error);
-                        *spawned = None;
-                    },
-                }
             }
 
             // End of conditional inner loop.
@@ -269,7 +270,7 @@ pub fn run(
                 },
                 Key::Down if clock.paused => {
                     clock.shift(-10);
-                    alarm_roster.time_travel(clock.elapsed);
+                    alarm_roster.time_travel(&mut clock);
                     layout.schedule_recalc();
                     force_redraw = true;
                 },
