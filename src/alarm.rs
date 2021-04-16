@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Stdio, Child};
+use std::io::BufRead;
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
 use unicode_width::UnicodeWidthStr;
@@ -350,23 +351,18 @@ impl AlarmRoster {
     pub fn from_stdin(&mut self, stdin: std::io::Stdin)
         -> Result<(), String>
     {
-        let mut buffer = String::new();
-        loop {
-            buffer.clear();
-            match stdin.read_line(&mut buffer) {
-                Ok(0) => break, // EOF.
-                Ok(1) => continue, // Empty (newline only).
-                Ok(_) if buffer.starts_with('#') => continue,
-                Ok(_) => (),
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(line)
+                if !line.starts_with('#')
+                && !line.trim().is_empty()
+                => {
+                    if let Err(e) = self.add(&line) {
+                        return Err(format!("Value \"{}\": {}", line, e));
+                    }
+                },
+                Ok(_) => (), // Discard comments and empty lines.
                 Err(e) => return Err(e.to_string()),
-            }
-            // Strip newline.
-            if buffer.ends_with('\n') { buffer.pop(); }
-            // Ignore lines containing only white spaces.
-            if buffer.contains(|c: char| !c.is_whitespace()) {
-                if let Err(e) = self.add(&buffer) {
-                    return Err(format!("Value \"{}\": {}",buffer, e));
-                }
             }
         }
         Ok(())

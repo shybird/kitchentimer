@@ -15,7 +15,6 @@ fn main() {
     // Read alarm times from stdin if stdin is not a tty.
     let stdin = std::io::stdin();
     if !termion::is_tty(&stdin) {
-        stdin.lock();
         if let Err(e) = alarm_roster.from_stdin(stdin) {
             eprintln!("Error while reading alarm times from stdin. ({})", e);
             process::exit(1);
