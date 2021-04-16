@@ -109,7 +109,7 @@ impl AlarmRoster {
         if let Some(i) = input.find(DELIMITER) {
             label = input[(i + 1)..].to_string();
             // Truncate label.
-            unicode_truncate(&mut label, LABEL_SIZE_LIMIT);
+            grapheme_truncate(&mut label, LABEL_SIZE_LIMIT, '…');
             time_str = &input[..i].trim();
         } else {
             label = input.clone();
@@ -210,7 +210,7 @@ impl AlarmRoster {
                 let mut col =
                     layout.roster.col
                     + 3
-                    + UnicodeWidthStr::width(&alarm.label[..]) as u16;
+                    + UnicodeWidthStr::width(alarm.label.as_str()) as u16;
                 let mut line = layout.roster.line + index as u16;
 
                 // Compensate for "hidden" items in the alarm roster.
@@ -318,7 +318,7 @@ impl AlarmRoster {
     pub fn width(&self) -> u16 {
         let mut width: u16 = 0;
         for alarm in &self.list {
-            let length = UnicodeWidthStr::width(&alarm.label[..]) as u16;
+            let length = UnicodeWidthStr::width(alarm.label.as_str()) as u16;
             if length > width { width = length };
         }
         // Actual width is 4 columns wider if it's not 0.

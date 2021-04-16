@@ -4,6 +4,7 @@ use std::io::Write;
 use termion::{clear, cursor, color};
 use termion::raw::RawTerminal;
 use crate::layout::Layout;
+use unicode_width::UnicodeWidthStr;
 use unicode_segmentation::UnicodeSegmentation;
 
 const PROMPT: &str = "Add alarm: ";
@@ -74,7 +75,7 @@ impl Buffer {
 
     // Draw input buffer.
     pub fn draw<W: Write>(
-        &self,
+        &mut self,
         stdout: &mut RawTerminal<W>,
         layout: &mut Layout,
     ) -> Result<(), std::io::Error>
@@ -93,7 +94,22 @@ impl Buffer {
             return Ok(());
         }
 
-        if !self.content.is_empty() {
+        if self.content.is_empty() {
+            // Clear buffer display.
+            write!(stdout,
+                "{}{}{}",
+                cursor::Goto(layout.buffer.col, layout.buffer.line),
+                clear::CurrentLine,
+                cursor::Hide)?;
+        } else {
+            // Check if buffer exceeds limits.
+            while UnicodeWidthStr::width(self.content.as_str())
+                + UnicodeWidthStr::width(PROMPT)
+                > layout.width as usize
+            {
+                self.content.pop();
+            }
+
             write!(stdout,
                 "{}{}{}{}{}",
                 cursor::Goto(layout.buffer.col, layout.buffer.line),
@@ -101,13 +117,6 @@ impl Buffer {
                 PROMPT,
                 cursor::Show,
                 &self.content)?;
-        } else {
-            // Clear buffer display.
-            write!(stdout,
-                "{}{}{}",
-                cursor::Goto(layout.buffer.col, layout.buffer.line),
-                clear::CurrentLine,
-                cursor::Hide)?;
         }
         Ok(())
     }
