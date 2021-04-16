@@ -2,6 +2,7 @@ use std::io::Write;
 use std::process::{Command, Stdio, Child};
 use termion::{color, cursor, style};
 use termion::raw::RawTerminal;
+use unicode_width::UnicodeWidthStr;
 use crate::Config;
 use crate::clock::Clock;
 use crate::layout::{Layout, Position};
@@ -208,7 +209,7 @@ impl AlarmRoster {
                 let mut col =
                     layout.roster.col
                     + 3
-                    + unicode_length(&alarm.label);
+                    + UnicodeWidthStr::width(&alarm.label[..]) as u16;
                 let mut line = layout.roster.line + index as u16;
 
                 // Compensate for "hidden" items in the alarm roster.
@@ -316,7 +317,7 @@ impl AlarmRoster {
     pub fn width(&self) -> u16 {
         let mut width: u16 = 0;
         for alarm in &self.list {
-            let length = unicode_length(&alarm.label);
+            let length = UnicodeWidthStr::width(&alarm.label[..]) as u16;
             if length > width { width = length };
         }
         // Actual width is 4 columns wider if it's not 0.
@@ -330,6 +331,7 @@ impl AlarmRoster {
         }
     }
 
+    // Call when time jumps backwards.
     pub fn time_travel(&mut self, time: u32) {
         for alarm in self.list.iter_mut() {
             alarm.exceeded = alarm.time <= time;
