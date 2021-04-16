@@ -5,6 +5,13 @@ pub struct Position {
     pub col: u16,
 }
 
+impl Position {
+    // Terminal positions are 1-based.
+    pub fn new() -> Position {
+        Position {col: 1, line: 1}
+    }
+}
+
 pub struct Layout {
     pub force_redraw: bool, // Redraw elements on screen.
     force_recalc: bool, // Recalculate position of elements.
@@ -35,16 +42,16 @@ impl Layout {
             clock_width: 0,
             clock_height: 0,
             digit_width: 0,
-            clock_sec: Position {col: 0, line: 0},
-            clock_colon0: Position {col: 0, line: 0},
-            clock_min: Position {col: 0, line: 0},
-            clock_colon1: Position {col: 0, line: 0},
-            clock_hr: Position {col: 0, line: 0},
-            clock_days: Position {col: 0, line: 0},
+            clock_sec: Position::new(),
+            clock_colon0: Position::new(),
+            clock_min: Position::new(),
+            clock_colon1: Position::new(),
+            clock_hr: Position::new(),
+            clock_days: Position::new(),
             roster: Position {col: 1, line: 3},
             roster_width: 0,
             roster_height: 0,
-            buffer: Position {col: 0, line: 0},
+            buffer: Position::new(),
         }
     }
 
