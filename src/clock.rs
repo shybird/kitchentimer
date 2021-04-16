@@ -10,7 +10,7 @@ use crate::layout::{Layout, Position};
 
 enum Pause {
     Instant(time::Instant),
-    Secs(u32),
+    Time((u32, u32)),
     None,
 }
 
@@ -61,7 +61,7 @@ impl Clock {
                     self.start = start;
                 }
             },
-            Pause::Secs(secs) => {
+            Pause::Time((secs, _days)) => {
                 self.start = time::Instant::now() - time::Duration::from_secs(secs as u64);
             },
             Pause::None => (), // O_o
@@ -81,12 +81,21 @@ impl Clock {
 
     pub fn shift(&mut self, shift: i32) {
         let secs = if shift.is_negative() {
+            if self.elapsed < shift.abs() as u32 && self.days > 0 {
+                // Negative day shift.
+                self.days -= 1;
+                self.elapsed += 24 * 60 * 60;
+            }
             self.elapsed.saturating_sub(shift.abs() as u32)
         } else {
             self.elapsed.saturating_add(shift as u32)
         };
-        self.paused_at = Pause::Secs(secs);
+        let days = self.days.saturating_add(secs / (24 * 60 * 60));
+        let secs = secs % (24 * 60 * 60);
+
+        self.paused_at = Pause::Time((secs, days));
         self.elapsed = secs;
+        self.days = days;
     }
 
     pub fn get_width(&self) -> u16 {
