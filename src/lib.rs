@@ -29,8 +29,7 @@ pub use consts::ui::*;
 pub fn run(
     config: Config,
     mut alarm_roster: AlarmRoster,
-    spawned: &mut Option<process::Child>,
-) -> Result<(), std::io::Error>
+) -> Result<Option<process::Child>, std::io::Error>
 {
     let mut layout = Layout::new();
     // Initialise roster_width.
@@ -43,6 +42,7 @@ pub fn run(
     let mut input_keys = async_stdin.keys();
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock().into_raw_mode()?;
+    let mut child: Option<process::Child> = None;
     let mut force_redraw = true;
 
     // Register signals.
@@ -121,21 +121,21 @@ pub fn run(
 
             // Check on last spawned child process prior to processing the
             // alarm roster and possibly starting a new one.
-            if let Some(ref mut child) = spawned {
-                match child.try_wait() {
+            if let Some(ref mut spawn) = child {
+                match spawn.try_wait() {
                     // Process exited successfully.
-                    Ok(Some(status)) if status.success() => *spawned = None,
+                    Ok(Some(status)) if status.success() => child = None,
                     // Abnormal exit.
                     Ok(Some(status)) => {
                         eprintln!("Spawned process terminated with non-zero exit status. ({})", status);
-                        *spawned = None;
+                        child = None;
                     },
                     // Process is still running.
                     Ok(None) => (),
                     // Other error.
                     Err(error) => {
                         eprintln!("Error executing command. ({})", error);
-                        *spawned = None;
+                        child = None;
                     },
                 }
             }
@@ -156,8 +156,8 @@ pub fn run(
 
                     match config.command {
                         // Run command if configured and no command is running.
-                        Some(ref command) if spawned.is_none() => {
-                            *spawned = exec_command(command, alarm.time, &alarm.label);
+                        Some(ref command) if child.is_none() => {
+                            child = exec_command(command, alarm.time, &alarm.label);
                         },
                         // Last command is still running.
                         Some(_) => eprintln!("Not executing command, as its predecessor is still running"),
@@ -345,7 +345,7 @@ pub fn run(
         cursor::Show)?;
     stdout.flush()?;
 
-    Ok(())
+    Ok(child)
 }
 
 pub struct Config {

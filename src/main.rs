@@ -12,7 +12,7 @@ fn main() {
             process::exit(1);
         });
 
-    // Read alarm times from stdin if stdin not a tty.
+    // Read alarm times from stdin if stdin is not a tty.
     let stdin = std::io::stdin();
     if !termion::is_tty(&stdin) {
         stdin.lock();
@@ -22,20 +22,23 @@ fn main() {
         }
     }
 
-    // Holds spawned child process if any.
-    let mut spawned: Option<process::Child> = None;
+    // Run main loop. Returns spawned child process if any.
+    let child = match run(config, alarm_roster) {
+        Ok(child) => child,
+        Err(error) => {
+            eprintln!("Main loop exited with error: {}", error);
+            process::exit(1);
+        },
+    };
 
-    // Run main loop.
-    if let Err(e) = run(config, alarm_roster, &mut spawned) {
-        eprintln!("Main loop exited with error: {}", e);
-        process::exit(1);
-    }
-
-    // Wait for remaining spawned processes to exit.
-    if let Some(ref mut child) = spawned {
+    // Wait for remaining spawned process to exit.
+    if let Some(mut child) = child {
         eprint!("Waiting for spawned process (PID {}) to finish ...", child.id());
 
         match child.wait() {
+            Ok(status) if status.success() => eprintln!(" ok"),
+            // Unix only.
+            Ok(status) if status.code().is_none() => eprintln!(" interrupted ({})", status),
             Ok(status) => eprintln!(" ok ({})", status),
             Err(error) => eprintln!(" failed ({})", error),
         }
