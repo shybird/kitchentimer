@@ -274,6 +274,15 @@ pub fn run(
                     layout.schedule_recalc();
                     force_redraw = true;
                 },
+                // Scroll alarm roster.
+                Key::PageUp => {
+                    alarm_roster.scroll_up(&layout);
+                    force_redraw = true;
+                },
+                Key::PageDown => {
+                    alarm_roster.scroll_down(&layout);
+                    force_redraw = true;
+                },
                 // Forward every char if in insert mode.
                 Key::Char(c) if buffer.visible => {
                     buffer.push(c);
@@ -297,7 +306,7 @@ pub fn run(
                 },
                 // Delete last alarm on 'd'.
                 Key::Char('d') => {
-                    if alarm_roster.drop_last() {
+                    if alarm_roster.pop().is_some() {
                         // If we remove the last alarm we have to reset "countdown"
                         // manually. It is safe to do it anyway.
                         layout.set_roster_width(alarm_roster.width());

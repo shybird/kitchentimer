@@ -37,10 +37,6 @@ impl Countdown {
         self.value = value;
     }
 
-    pub fn set_position(&mut self, position: Position) {
-        self.position = Some(position);
-    }
-
     pub fn has_position(&self) -> bool {
         self.position.is_some()
     }
@@ -74,6 +70,40 @@ impl Countdown {
         }
         Ok(())
     }
+
+    pub fn place(
+        &mut self,
+        layout: &Layout,
+        alarm: &Alarm,
+        offset: usize,
+        index: usize,
+    ) {
+        // Compute position.
+        let mut col =
+            layout.roster.col
+            + 3
+            + UnicodeWidthStr::width(alarm.label.as_str()) as u16;
+        let mut line = layout.roster.line + index as u16;
+
+        // Compensate for "hidden" items in the alarm roster.
+        if offset > 0 {
+            if index <= offset {
+                // Draw next to upper placeholder.
+                line = layout.roster.line;
+                col = layout.roster.col + 6;
+            } else {
+                // Should be no problem as index > offset and
+                // line is x + index.
+                line -= offset as u16;
+            }
+        }
+        if line > layout.roster_height.saturating_add(2) {
+            // Draw next to lower placeholder.
+            line = layout.roster.line + layout.roster_height;
+            col = layout.roster.col + 6;
+        }
+        self.position = Some(Position { col, line });
+    }
 }
 
 pub struct Alarm {
@@ -91,12 +121,14 @@ impl Alarm {
 
 pub struct AlarmRoster {
     list: Vec<Alarm>,
+    offset: usize,
 }
 
 impl AlarmRoster {
     pub fn new() -> AlarmRoster {
         AlarmRoster {
             list: Vec::new(),
+            offset: 0,
         }
     }
 
@@ -170,13 +202,28 @@ impl AlarmRoster {
     }
 
     // Remove last alarm.
-    pub fn drop_last(&mut self) -> bool {
-        self.list.pop().is_some()
+    pub fn pop(&mut self) -> Option<Alarm> {
+        self.list.pop()
+    }
+
+    // Offset ceiling according to layout information.
+    fn adjust_offset(&mut self, layout: &Layout) {
+        self.offset = self.offset.min(self.list.len().saturating_sub(layout.roster_height as usize));
     }
 
     // Check for active alarms.
     pub fn idle(&self) -> bool {
         !self.list.iter().any(|a| !a.exceeded)
+    }
+
+    pub fn scroll_up(&mut self, layout: &Layout) {
+        let excess = self.list.len().saturating_sub(layout.roster_height as usize);
+        self.offset = excess.min(self.offset.saturating_sub(1));
+    }
+
+    pub fn scroll_down(&mut self, layout: &Layout) {
+        let excess = self.list.len().saturating_sub(layout.roster_height as usize);
+        self.offset = excess.min(self.offset.saturating_add(1));
     }
 
     // Find and process exceeded alarms.
@@ -188,7 +235,6 @@ impl AlarmRoster {
     ) -> Option<&Alarm>
     {
         let mut ret = None;
-        let size = self.list.len() as u16;
 
         for (index, alarm) in self.list.iter_mut()
             .enumerate()
@@ -207,26 +253,7 @@ impl AlarmRoster {
             // Reached the alarm to exceed next. Update countdown accordingly.
             countdown.set(alarm.time - clock.elapsed);
             if !countdown.has_position() || force_redraw {
-                // Compute position.
-                let mut col =
-                    layout.roster.col
-                    + 3
-                    + UnicodeWidthStr::width(alarm.label.as_str()) as u16;
-                let mut line = layout.roster.line + index as u16;
-
-                // Compensate for "hidden" items in the alarm roster.
-                // TODO: Make this more elegant and robust.
-                if let Some(offset) = size.checked_sub(layout.roster_height + 1) {
-                    if index as u16 <= offset{
-                        // Draw next to placeholder ("[...]").
-                        line = layout.roster.line;
-                        col = layout.roster.col + 6;
-                    } else {
-                        line = line.checked_sub(offset)
-                            .unwrap_or(layout.roster.line);
-                    }
-                }
-                countdown.set_position(Position { col, line });
+                countdown.place(&layout, &alarm, self.offset, index);
             }
             // Ignore other alarms.
             break;
@@ -236,35 +263,43 @@ impl AlarmRoster {
 
     // Draw alarm roster according to layout.
     pub fn draw<W: Write>(
-        &self,
+        &mut self,
         stdout: &mut RawTerminal<W>,
         layout: &mut Layout,
         config: &Config,
     ) -> Result<(), std::io::Error>
     {
-        // Find first item to print in case we lack the space to print them
-        // all. Final '-1' to take account for the input buffer.
-        let mut offset = 0;
+        // Match offset to layout.
+        self.adjust_offset(&layout);
 
-        if self.list.len() > layout.roster_height as usize {
-            // Actually -1 (zero indexing) +1 (first line containing "[...]").
-            offset = self.list.len() - layout.roster_height as usize;
+        for (i, alarm) in self.list.iter()
+            .skip(self.offset)
+            .enumerate()
+        {
+            // Add 1 to compensate for the line "[...]".
+            let line = layout.roster.line + i as u16;
 
-            write!(stdout,
-                "{}{}[...]{}",
-                cursor::Goto(layout.roster.col, layout.roster.line),
-                style::Faint,
-                style::Reset,
-            )?;
-        }
-
-        for (i, alarm) in self.list.iter().skip(offset).enumerate() {
-            let line = if offset > 0 {
-                // Add offset of one for "[...]".
-                layout.roster.line + i as u16 + 1
-            } else {
-                layout.roster.line + i as u16
-            };
+            if self.offset > 0 && i == 0 {
+                // Indicate hidden items at top.
+                write!(stdout,
+                    "{}{}{}{}",
+                    cursor::Goto(layout.roster.col, line),
+                    style::Faint,
+                    if config.fancy { "╶╴▲╶╴" } else { "[ ^ ]" },
+                    style::Reset,
+                )?;
+                continue;
+            } else if i == layout.roster_height as usize {
+                // Indicate hidden items at bottom.
+                write!(stdout,
+                    "{}{}{}{}",
+                    cursor::Goto(layout.roster.col, line),
+                    style::Faint,
+                    if config.fancy { "╶╴▼╶╴" } else { "[ v ]" },
+                    style::Reset,
+                )?;
+                break;
+            }
 
             match alarm.exceeded {
                 true if config.fancy => {
