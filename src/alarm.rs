@@ -1,19 +1,18 @@
-use std::io::Write;
-use std::process::{Command, Stdio, Child};
-use std::io::BufRead;
-use termion::{color, cursor, style};
-use termion::raw::RawTerminal;
-use unicode_width::UnicodeWidthStr;
-use crate::Config;
 use crate::clock::Clock;
+use crate::consts::{COLOR, LABEL_SIZE_LIMIT};
 use crate::layout::{Layout, Position};
 use crate::utils::*;
-use crate::consts::{COLOR, LABEL_SIZE_LIMIT};
+use crate::Config;
+use std::io::BufRead;
+use std::io::Write;
+use std::process::{Child, Command, Stdio};
+use termion::raw::RawTerminal;
+use termion::{color, cursor, style};
+use unicode_width::UnicodeWidthStr;
 
 // Delimiter between time and label. Remember to update usage information in
 // consts.rs when changing this.
 const DELIMITER: char = '/';
-
 
 pub struct Countdown {
     pub value: u32,
@@ -42,17 +41,17 @@ impl Countdown {
     }
 
     // Draw countdown.
-    pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>)
-        -> Result<(), std::io::Error>
-    {
+    pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> {
         if let Some(pos) = &self.position {
             if self.value < 3600 {
                 // Show minutes and seconds.
-                write!(stdout,
+                write!(
+                    stdout,
                     "{}(-{:02}:{:02})",
                     cursor::Goto(pos.col, pos.line),
                     (self.value / 60) % 60,
-                    self.value % 60)?;
+                    self.value % 60
+                )?;
                 if self.value == 3599 {
                     // Write three additional spaces after switching from hour display to
                     // minute display.
@@ -60,29 +59,22 @@ impl Countdown {
                 }
             } else {
                 // Show hours, minutes and seconds.
-                write!(stdout,
+                write!(
+                    stdout,
                     "{}(-{:02}:{:02}:{:02})",
                     cursor::Goto(pos.col, pos.line),
                     self.value / 3600,
                     (self.value / 60) % 60,
-                    self.value % 60)?;
+                    self.value % 60
+                )?;
             }
         }
         Ok(())
     }
 
-    pub fn place(
-        &mut self,
-        layout: &Layout,
-        alarm: &Alarm,
-        offset: usize,
-        index: usize,
-    ) {
+    pub fn place(&mut self, layout: &Layout, alarm: &Alarm, offset: usize, index: usize) {
         // Compute position.
-        let mut col =
-            layout.roster.col
-            + 3
-            + UnicodeWidthStr::width(alarm.label.as_str()) as u16;
+        let mut col = layout.roster.col + 3 + UnicodeWidthStr::width(alarm.label.as_str()) as u16;
         let mut line = layout.roster.line + index as u16;
 
         // Compensate for "hidden" items in the alarm roster.
@@ -176,8 +168,12 @@ impl AlarmRoster {
         }
 
         // Skip if time is out of boundaries.
-        if time == 0 { return Err("Evaluates to zero.") };
-        if time >= 24 * 60 * 60 { return Err("Values >24h not supported.") };
+        if time == 0 {
+            return Err("Evaluates to zero.");
+        };
+        if time >= 24 * 60 * 60 {
+            return Err("Values >24h not supported.");
+        };
         // Filter out double entries.
         if self.list.iter().any(|a| a.time == time) {
             return Err("Already exists.");
@@ -208,7 +204,11 @@ impl AlarmRoster {
 
     // Offset ceiling according to layout information.
     fn adjust_offset(&mut self, layout: &Layout) {
-        self.offset = self.offset.min(self.list.len().saturating_sub(layout.roster_height as usize));
+        self.offset = self.offset.min(
+            self.list
+                .len()
+                .saturating_sub(layout.roster_height as usize),
+        );
     }
 
     // Check for active alarms.
@@ -217,30 +217,38 @@ impl AlarmRoster {
     }
 
     pub fn scroll_up(&mut self, layout: &Layout) {
-        let excess = self.list.len().saturating_sub(layout.roster_height as usize);
+        let excess = self
+            .list
+            .len()
+            .saturating_sub(layout.roster_height as usize);
         self.offset = excess.min(self.offset.saturating_sub(1));
     }
 
     pub fn scroll_down(&mut self, layout: &Layout) {
-        let excess = self.list.len().saturating_sub(layout.roster_height as usize);
+        let excess = self
+            .list
+            .len()
+            .saturating_sub(layout.roster_height as usize);
         self.offset = excess.min(self.offset.saturating_add(1));
     }
 
     // Find and process exceeded alarms.
-    pub fn check(&mut self,
+    pub fn check(
+        &mut self,
         clock: &mut Clock,
         layout: &Layout,
         countdown: &mut Countdown,
         force_redraw: bool,
-    ) -> Option<&Alarm>
-    {
+    ) -> Option<&Alarm> {
         let mut ret = None;
 
-        for (index, alarm) in self.list.iter_mut()
+        for (index, alarm) in self
+            .list
+            .iter_mut()
             .enumerate()
             // Ignore alarms marked exceeded.
-            .filter(|(_, a)| !a.exceeded) {
-
+            .filter(|(_, a)| !a.exceeded)
+        {
             if alarm.time <= clock.elapsed {
                 // Found alarm to raise.
                 alarm.exceeded = true;
@@ -267,35 +275,41 @@ impl AlarmRoster {
         stdout: &mut RawTerminal<W>,
         layout: &mut Layout,
         config: &Config,
-    ) -> Result<(), std::io::Error>
-    {
+    ) -> Result<(), std::io::Error> {
         // Match offset to layout.
         self.adjust_offset(&layout);
 
-        for (i, alarm) in self.list.iter()
-            .skip(self.offset)
-            .enumerate()
-        {
+        for (i, alarm) in self.list.iter().skip(self.offset).enumerate() {
             // Add 1 to compensate for the line "[...]".
             let line = layout.roster.line + i as u16;
 
             if self.offset > 0 && i == 0 {
                 // Indicate hidden items at top.
-                write!(stdout,
+                write!(
+                    stdout,
                     "{}{}{}{}",
                     cursor::Goto(layout.roster.col, line),
                     style::Faint,
-                    if config.fancy { "╶╴▲╶╴" } else { "[ ^ ]" },
+                    if config.fancy {
+                        "╶╴▲╶╴"
+                    } else {
+                        "[ ^ ]"
+                    },
                     style::Reset,
                 )?;
                 continue;
             } else if i == layout.roster_height as usize {
                 // Indicate hidden items at bottom.
-                write!(stdout,
+                write!(
+                    stdout,
                     "{}{}{}{}",
                     cursor::Goto(layout.roster.col, line),
                     style::Faint,
-                    if config.fancy { "╶╴▼╶╴" } else { "[ v ]" },
+                    if config.fancy {
+                        "╶╴▼╶╴"
+                    } else {
+                        "[ v ]"
+                    },
                     style::Reset,
                 )?;
                 break;
@@ -303,7 +317,8 @@ impl AlarmRoster {
 
             match alarm.exceeded {
                 true if config.fancy => {
-                    write!(stdout,
+                    write!(
+                        stdout,
                         "{}{}{}{} {} {}🭬{}{}",
                         cursor::Goto(layout.roster.col, line),
                         color::Fg(COLOR[alarm.color_index]),
@@ -314,18 +329,20 @@ impl AlarmRoster {
                         color::Fg(color::Reset),
                         style::Reset,
                     )?;
-                },
+                }
                 false if config.fancy => {
-                    write!(stdout,
+                    write!(
+                        stdout,
                         "{}{}█🭬{}{}",
                         cursor::Goto(layout.roster.col, line),
                         color::Fg(COLOR[alarm.color_index]),
                         color::Fg(color::Reset),
                         &alarm.label,
                     )?;
-                },
+                }
                 true => {
-                    write!(stdout,
+                    write!(
+                        stdout,
                         "{}{}{}{} {} {}{}",
                         cursor::Goto(layout.roster.col, line),
                         color::Fg(COLOR[alarm.color_index]),
@@ -335,16 +352,17 @@ impl AlarmRoster {
                         color::Fg(color::Reset),
                         style::Reset,
                     )?;
-                },
+                }
                 false => {
-                    write!(stdout,
+                    write!(
+                        stdout,
                         "{}{} {} {}",
                         cursor::Goto(layout.roster.col, line),
                         color::Bg(COLOR[alarm.color_index]),
                         color::Bg(color::Reset),
                         &alarm.label,
                     )?;
-                },
+                }
             }
         }
         Ok(())
@@ -355,10 +373,16 @@ impl AlarmRoster {
         let mut width: u16 = 0;
         for alarm in &self.list {
             let length = UnicodeWidthStr::width(alarm.label.as_str()) as u16;
-            if length > width { width = length };
+            if length > width {
+                width = length
+            };
         }
         // Actual width is 4 columns wider if it's not 0.
-        if width == 0 { 0 } else { width.saturating_add(4) }
+        if width == 0 {
+            0
+        } else {
+            width.saturating_add(4)
+        }
     }
 
     // Reset every alarm.
@@ -383,19 +407,14 @@ impl AlarmRoster {
     }
 
     // Read alarm times from stdin.
-    pub fn from_stdin(&mut self, stdin: std::io::Stdin)
-        -> Result<(), String>
-    {
+    pub fn from_stdin(&mut self, stdin: std::io::Stdin) -> Result<(), String> {
         for line in stdin.lock().lines() {
             match line {
-                Ok(line)
-                if !line.starts_with('#')
-                && !line.trim().is_empty()
-                => {
+                Ok(line) if !line.starts_with('#') && !line.trim().is_empty() => {
                     if let Err(e) = self.add(&line) {
                         return Err(format!("Value \"{}\": {}", line, e));
                     }
-                },
+                }
                 Ok(_) => (), // Discard comments and empty lines.
                 Err(e) => return Err(e.to_string()),
             }
@@ -409,7 +428,12 @@ pub fn exec_command(command: &Vec<String>, elapsed: u32, label: &String) -> Opti
     let time = if elapsed < 3600 {
         format!("{:02}:{:02}", elapsed / 60, elapsed % 60)
     } else {
-        format!("{:02}:{:02}:{:02}", elapsed /3600, (elapsed / 60) % 60, elapsed % 60)
+        format!(
+            "{:02}:{:02}:{:02}",
+            elapsed / 3600,
+            (elapsed / 60) % 60,
+            elapsed % 60
+        )
     };
 
     let mut args: Vec<String> = Vec::new();
@@ -423,7 +447,8 @@ pub fn exec_command(command: &Vec<String>, elapsed: u32, label: &String) -> Opti
         .args(args)
         .stdout(Stdio::null())
         .stdin(Stdio::null())
-        .spawn() {
+        .spawn()
+    {
         Ok(child) => Some(child),
         Err(error) => {
             eprintln!("Error: Could not execute command. ({})", error);
@@ -431,4 +456,3 @@ pub fn exec_command(command: &Vec<String>, elapsed: u32, label: &String) -> Opti
         }
     }
 }
-

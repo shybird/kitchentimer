@@ -1,5 +1,5 @@
-use crate::layout::Layout;
 use crate::clock::Clock;
+use crate::layout::Layout;
 use crate::Config;
 
 fn default_config() -> Config {

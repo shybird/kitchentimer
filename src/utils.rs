@@ -6,8 +6,7 @@ pub fn grapheme_truncate(input: &mut String, limit: usize, ellipse: char) {
         Some((i, _)) => {
             input.truncate(i);
             input.push(ellipse);
-        },
+        }
         None => (),
     }
 }
-

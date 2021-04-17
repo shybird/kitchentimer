@@ -1,14 +1,13 @@
 extern crate unicode_segmentation;
 
-use std::io::Write;
-use termion::{clear, cursor, color};
-use termion::raw::RawTerminal;
 use crate::layout::Layout;
-use unicode_width::UnicodeWidthStr;
+use std::io::Write;
+use termion::raw::RawTerminal;
+use termion::{clear, color, cursor};
 use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 const PROMPT: &str = "Add alarm: ";
-
 
 // Input buffer.
 pub struct Buffer {
@@ -50,8 +49,7 @@ impl Buffer {
     pub fn strip_word(&mut self) {
         // Reset error message.
         self.message = None;
-        let iter = UnicodeSegmentation::split_word_bound_indices(
-            self.content.as_str().trim_end());
+        let iter = UnicodeSegmentation::split_word_bound_indices(self.content.as_str().trim_end());
 
         if let Some((index, _)) = iter.last() {
             self.content.truncate(index);
@@ -78,54 +76,55 @@ impl Buffer {
         &mut self,
         stdout: &mut RawTerminal<W>,
         layout: &mut Layout,
-    ) -> Result<(), std::io::Error>
-    {
+    ) -> Result<(), std::io::Error> {
         // Write error message if present and return.
         if let Some(msg) = self.message {
-            write!(stdout,
+            write!(
+                stdout,
                 "{}{}{}{}{}{}{}",
                 cursor::Hide,
-                cursor::Goto( layout.buffer.col, layout.buffer.line),
+                cursor::Goto(layout.buffer.col, layout.buffer.line),
                 clear::CurrentLine,
                 PROMPT,
                 color::Fg(color::LightRed),
                 &msg,
-                color::Fg(color::Reset))?;
+                color::Fg(color::Reset)
+            )?;
             return Ok(());
         }
 
         if self.content.is_empty() {
             // Clear buffer display.
-            write!(stdout,
+            write!(
+                stdout,
                 "{}{}{}",
                 cursor::Goto(layout.buffer.col, layout.buffer.line),
                 clear::CurrentLine,
-                cursor::Hide)?;
+                cursor::Hide
+            )?;
         } else {
             // Check if buffer exceeds limits.
-            while UnicodeWidthStr::width(self.content.as_str())
-                + UnicodeWidthStr::width(PROMPT)
+            while UnicodeWidthStr::width(self.content.as_str()) + UnicodeWidthStr::width(PROMPT)
                 > layout.width as usize
             {
                 self.content.pop();
             }
 
-            write!(stdout,
+            write!(
+                stdout,
                 "{}{}{}{}{}",
                 cursor::Goto(layout.buffer.col, layout.buffer.line),
                 clear::CurrentLine,
                 PROMPT,
                 cursor::Show,
-                &self.content)?;
+                &self.content
+            )?;
         }
         Ok(())
     }
 
     // Draw error message at input buffer position.
-    pub fn message(
-        &mut self,
-        msg: &'static str,
-    ) {
+    pub fn message(&mut self, msg: &'static str) {
         self.message = Some(msg);
     }
 }

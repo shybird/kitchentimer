@@ -8,13 +8,13 @@ pub struct Position {
 impl Position {
     // Terminal positions are 1-based.
     pub fn new() -> Position {
-        Position {col: 1, line: 1}
+        Position { col: 1, line: 1 }
     }
 }
 
 pub struct Layout {
     pub force_redraw: bool, // Redraw elements on screen.
-    force_recalc: bool, // Recalculate position of elements.
+    force_recalc: bool,     // Recalculate position of elements.
     pub width: u16,
     pub height: u16,
     clock_width: u16,
@@ -48,7 +48,7 @@ impl Layout {
             clock_colon1: Position::new(),
             clock_hr: Position::new(),
             clock_days: Position::new(),
-            roster: Position {col: 1, line: 3},
+            roster: Position { col: 1, line: 3 },
             roster_width: 0,
             roster_height: 0,
             buffer: Position::new(),
@@ -56,9 +56,7 @@ impl Layout {
     }
 
     // Update layout. Returns true when changes were made.
-    pub fn update(&mut self, clock: &Clock, force: bool)
-        -> Result<bool, std::io::Error>
-    {
+    pub fn update(&mut self, clock: &Clock, force: bool) -> Result<bool, std::io::Error> {
         if self.force_recalc || force {
             self.force_recalc = false;
             let (width, height) = termion::terminal_size()?;
@@ -79,13 +77,7 @@ impl Layout {
     }
 
     #[cfg(test)]
-    pub fn test_update(
-        &mut self,
-        clock: &Clock,
-        width: u16,
-        height: u16,
-        roster_width: u16,
-    ) {
+    pub fn test_update(&mut self, clock: &Clock, width: u16, height: u16, roster_width: u16) {
         self.width = width;
         self.height = height;
         self.clock_width = clock.get_width();
@@ -104,7 +96,9 @@ impl Layout {
     // terminal.
     fn compute(&mut self, display_hours: bool) {
         // Prevent integer overflow at very low screen sizes.
-        if self.width < self.clock_width || self.height < self.clock_height { return; }
+        if self.width < self.clock_width || self.height < self.clock_height {
+            return;
+        }
 
         let middle: u16 = self.height / 2 - 1;
 
@@ -163,4 +157,3 @@ impl Layout {
         }
     }
 }
-

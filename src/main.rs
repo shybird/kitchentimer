@@ -1,16 +1,14 @@
+use kitchentimer::{run, AlarmRoster, Config};
 use std::{env, process};
-use kitchentimer::{Config, AlarmRoster, run};
-
 
 fn main() {
     let args = env::args();
     let mut alarm_roster = AlarmRoster::new();
     // Parse command line arguments into config and alarm roster.
-    let config = Config::new(args, &mut alarm_roster)
-        .unwrap_or_else(|e| {
-            eprintln!("{}", e);
-            process::exit(1);
-        });
+    let config = Config::new(args, &mut alarm_roster).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        process::exit(1);
+    });
 
     // Read alarm times from stdin if stdin is not a tty.
     let stdin = std::io::stdin();
@@ -27,12 +25,15 @@ fn main() {
         Err(error) => {
             eprintln!("Main loop exited with error: {}", error);
             process::exit(1);
-        },
+        }
     };
 
     // Wait for remaining spawned process to exit.
     if let Some(mut child) = child {
-        eprint!("Waiting for spawned process (PID {}) to finish ...", child.id());
+        eprint!(
+            "Waiting for spawned process (PID {}) to finish ...",
+            child.id()
+        );
 
         match child.wait() {
             Ok(status) if status.success() => eprintln!(" ok"),
@@ -43,5 +44,3 @@ fn main() {
         }
     }
 }
-
-

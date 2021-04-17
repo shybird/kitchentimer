@@ -1,36 +1,34 @@
-extern crate termion;
 extern crate signal_hook;
+extern crate termion;
 pub mod alarm;
 mod buffer;
 pub mod clock;
 pub mod consts;
 pub mod layout;
-pub mod utils;
 #[cfg(test)]
 mod tests;
+pub mod utils;
 
-use std::{env, process, thread, time};
-use std::io::Write;
+pub use alarm::AlarmRoster;
+use alarm::{exec_command, Countdown};
+use buffer::Buffer;
+use clock::{font, Clock};
+pub use consts::ui::*;
+use layout::Layout;
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
 use signal_hook::low_level;
-use termion::{clear, cursor, style};
-use termion::raw::{IntoRawMode, RawTerminal};
+use std::io::Write;
+use std::{env, process, thread, time};
 use termion::event::Key;
 use termion::input::TermRead;
-use buffer::Buffer;
-use clock::{Clock, font};
-use layout::Layout;
-use alarm::{Countdown, exec_command};
-pub use alarm::AlarmRoster;
-pub use consts::ui::*;
-
+use termion::raw::{IntoRawMode, RawTerminal};
+use termion::{clear, cursor, style};
 
 pub fn run(
     config: Config,
     mut alarm_roster: AlarmRoster,
-) -> Result<Option<process::Child>, std::io::Error>
-{
+) -> Result<Option<process::Child>, std::io::Error> {
     let mut layout = Layout::new();
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
@@ -47,13 +45,7 @@ pub fn run(
 
     // Register signals.
     let mut signals = Signals::new(&[
-        SIGTSTP,
-        SIGCONT,
-        SIGWINCH,
-        SIGTERM,
-        SIGINT,
-        SIGUSR1,
-        SIGUSR2,
+        SIGTSTP, SIGCONT, SIGWINCH, SIGTERM, SIGINT, SIGUSR1, SIGUSR2,
     ])?;
 
     // Main loop entry.
@@ -67,7 +59,7 @@ pub fn run(
                 SIGCONT => {
                     restore_after_suspend(&mut stdout)?;
                     force_redraw = true;
-                },
+                }
                 SIGWINCH => layout.schedule_recalc(),
                 // Exit main loop on SIGTERM and SIGINT.
                 SIGTERM | SIGINT => break 'outer,
@@ -77,12 +69,12 @@ pub fn run(
                     alarm_roster.reset_all();
                     layout.schedule_recalc();
                     force_redraw = true;
-                },
+                }
                 // (Un-)Pause clock on SIGUSR2.
                 SIGUSR2 => {
                     clock.toggle();
                     force_redraw = true;
-                },
+                }
                 // We didn't register anything else.
                 _ => unreachable!(),
             }
@@ -90,16 +82,16 @@ pub fn run(
 
         // Update elapsed time.
         let elapsed = if clock.paused {
-                clock.elapsed
-            } else {
-                // Should never overflow as we reestablish a new "start"
-                // instant every 24 hours.
-                clock.start.elapsed().as_secs() as u32
-            };
+            clock.elapsed
+        } else {
+            // Should never overflow as we reestablish a new "start"
+            // instant every 24 hours.
+            clock.start.elapsed().as_secs() as u32
+        };
 
         // Conditional inner loop. Runs once every second or when explicitly
         // requested.
-        if elapsed != clock.elapsed || force_redraw  {
+        if elapsed != clock.elapsed || force_redraw {
             // Update clock. Advance one day after 24 hours.
             if elapsed < 24 * 60 * 60 {
                 clock.elapsed = elapsed;
@@ -127,25 +119,25 @@ pub fn run(
                     Ok(Some(status)) if status.success() => child = None,
                     // Abnormal exit.
                     Ok(Some(status)) => {
-                        eprintln!("Spawned process terminated with non-zero exit status. ({})", status);
+                        eprintln!(
+                            "Spawned process terminated with non-zero exit status. ({})",
+                            status
+                        );
                         child = None;
-                    },
+                    }
                     // Process is still running.
                     Ok(None) => (),
                     // Other error.
                     Err(error) => {
                         eprintln!("Error executing command. ({})", error);
                         child = None;
-                    },
+                    }
                 }
             }
 
             // Check for exceeded alarms.
-            if let Some(alarm) = alarm_roster.check(
-                &mut clock,
-                &layout,
-                &mut countdown,
-                force_redraw)
+            if let Some(alarm) =
+                alarm_roster.check(&mut clock, &layout, &mut countdown, force_redraw)
             {
                 // Do not react to exceeded alarms if the clock is paused.
                 if !clock.paused {
@@ -158,13 +150,17 @@ pub fn run(
                         // Run command if configured and no command is running.
                         Some(ref command) if child.is_none() => {
                             child = exec_command(command, alarm.time, &alarm.label);
-                        },
+                        }
                         // Last command is still running.
-                        Some(_) => eprintln!("Not executing command, as its predecessor is still running"),
+                        Some(_) => {
+                            eprintln!("Not executing command, as its predecessor is still running")
+                        }
                         None => (),
                     }
                     // Quit if configured.
-                    if config.quit && alarm_roster.idle() { break };
+                    if config.quit && alarm_roster.idle() {
+                        break;
+                    };
                 }
             }
 
@@ -172,7 +168,8 @@ pub fn run(
             // requested.
             if force_redraw {
                 // Write menu at the top.
-                write!(stdout,
+                write!(
+                    stdout,
                     "{}{}{}{}{}",
                     cursor::Goto(1, 1),
                     style::Faint,
@@ -189,7 +186,8 @@ pub fn run(
                         _ => " ",
                     },
                     clear::AfterCursor,
-                    style::NoFaint)?;
+                    style::NoFaint
+                )?;
 
                 // Redraw list of alarms.
                 alarm_roster.draw(&mut stdout, &mut layout, &config)?;
@@ -234,13 +232,13 @@ pub fn run(
                         buffer.visible = false;
                         force_redraw = true;
                     }
-                },
+                }
                 // Escape and ^U clear input buffer.
                 Key::Esc | Key::Ctrl('u') => {
                     buffer.reset();
                     buffer.visible = false;
                     force_redraw = true;
-                },
+                }
                 // ^W removes last word.
                 Key::Ctrl('w') => {
                     buffer.strip_word();
@@ -248,7 +246,7 @@ pub fn run(
                         buffer.visible = false;
                         force_redraw = true;
                     }
-                },
+                }
                 // Backspace.
                 Key::Backspace => {
                     // Delete last char in buffer.
@@ -257,7 +255,7 @@ pub fn run(
                         buffer.visible = false;
                         force_redraw = true;
                     }
-                },
+                }
                 // Set clock.
                 Key::Up if clock.paused => {
                     clock.shift(10);
@@ -267,43 +265,43 @@ pub fn run(
                     // here.
                     layout.schedule_recalc();
                     force_redraw = true;
-                },
+                }
                 Key::Down if clock.paused => {
                     clock.shift(-10);
                     alarm_roster.time_travel(&mut clock);
                     layout.schedule_recalc();
                     force_redraw = true;
-                },
+                }
                 // Scroll alarm roster.
                 Key::PageUp => {
                     alarm_roster.scroll_up(&layout);
                     force_redraw = true;
-                },
+                }
                 Key::PageDown => {
                     alarm_roster.scroll_down(&layout);
                     force_redraw = true;
-                },
+                }
                 // Forward every char if in insert mode.
                 Key::Char(c) if buffer.visible => {
                     buffer.push(c);
-                },
+                }
                 // Reset clock on 'r'.
                 Key::Char('r') => {
                     clock.reset();
                     alarm_roster.reset_all();
                     layout.schedule_recalc();
                     force_redraw = true;
-                },
+                }
                 // (Un-)Pause on space.
                 Key::Char(' ') => {
                     clock.toggle();
                     force_redraw = true;
-                },
+                }
                 // Clear clock color on 'c'.
                 Key::Char('c') => {
                     clock.color_index = None;
                     force_redraw = true;
-                },
+                }
                 // Delete last alarm on 'd'.
                 Key::Char('d') => {
                     if alarm_roster.pop().is_some() {
@@ -313,7 +311,7 @@ pub fn run(
                         countdown.reset();
                         force_redraw = true;
                     }
-                },
+                }
                 // Exit on q and ^C.
                 Key::Char('q') | Key::Ctrl('c') => break,
                 // Force redraw on ^R.
@@ -327,7 +325,7 @@ pub fn run(
                     force_redraw = true;
                     // Jump to the start of the main loop.
                     continue;
-                },
+                }
                 Key::Char(c) => {
                     if c.is_ascii_digit() {
                         buffer.push(c);
@@ -336,7 +334,7 @@ pub fn run(
                     } else if !buffer.is_empty() && c == ':' {
                         buffer.push(':');
                     }
-                },
+                }
                 // Any other key.
                 _ => (),
             }
@@ -347,11 +345,7 @@ pub fn run(
     }
 
     // Main loop exited. Clear screen and restore cursor.
-    write!(stdout,
-        "{}{}{}",
-        clear::All,
-        cursor::Restore,
-        cursor::Show)?;
+    write!(stdout, "{}{}{}", clear::All, cursor::Restore, cursor::Show)?;
     stdout.flush()?;
 
     Ok(child)
@@ -366,9 +360,7 @@ pub struct Config {
 
 impl Config {
     // Parse command line arguments into "config".
-    pub fn new(args: env::Args, alarm_roster: &mut AlarmRoster)
-        -> Result<Config, String>
-    {
+    pub fn new(args: env::Args, alarm_roster: &mut AlarmRoster) -> Result<Config, String> {
         let mut config = Config {
             quit: false,
             fancy: false,
@@ -384,16 +376,16 @@ impl Config {
                         // Print usage information and exit
                         println!("{}", USAGE);
                         process::exit(0);
-                    },
+                    }
                     "-v" | "--version" => {
                         println!("{} {}", NAME, VERSION);
                         process::exit(0);
-                    },
+                    }
                     "-p" | "--plain" => config.font = &font::PLAIN,
                     "-f" | "--fancy" => {
                         config.fancy = true;
                         config.font = &font::CHROME;
-                    },
+                    }
                     "-q" | "--quit" => config.quit = true,
                     "-e" | "--exec" => {
                         if let Some(e) = iter.next() {
@@ -401,19 +393,21 @@ impl Config {
                         } else {
                             return Err(format!("Missing parameter to \"{}\".", arg));
                         }
-                    },
+                    }
                     any if any.starts_with('-') => {
                         // Unrecognized flag.
                         return Err(format!("Unrecognized option: \"{}\"\nUse \"-h\" or \"--help\" for a list of valid command line options.", any));
-                    },
+                    }
                     any => {
                         // Alarm to add.
                         if let Err(error) = alarm_roster.add(&String::from(any)) {
                             return Err(format!("Error adding \"{}\" as alarm. ({})", any, error));
                         }
-                    },
+                    }
                 }
-            } else { break; } // All command line parameters processed.
+            } else {
+                break;
+            } // All command line parameters processed.
         }
         Ok(config)
     }
@@ -432,23 +426,27 @@ impl Config {
                     // Next char is escaped. (If not escaped itself.)
                     escaped = true;
                     continue;
-                },
+                }
                 // Keep spaces when escaped or quoted.
-                ' ' if escaped || quoted => { &segment.push(' '); },
+                ' ' if escaped || quoted => {
+                    &segment.push(' ');
+                }
                 // Otherwise end the current segment.
                 ' ' => {
                     if !&segment.is_empty() {
                         command.push(segment.clone());
                         &segment.clear();
                     }
-                },
+                }
                 // Quotation marks toggle quote.
                 '"' | '\'' if !escaped => quoted = !quoted,
                 // Carry everything else. Escape if found escaped.
                 _ => {
-                    if escaped { &segment.push('\\'); }
+                    if escaped {
+                        &segment.push('\\');
+                    }
                     &segment.push(c);
-                },
+                }
             }
             escaped = false;
         }
@@ -459,19 +457,21 @@ impl Config {
 }
 
 // Prepare to suspend execution. Called on SIGTSTP.
-fn suspend<W: Write>(stdout: &mut RawTerminal<W>)
-    -> Result<(), std::io::Error>
-{
-    write!(stdout,
+fn suspend<W: Write>(stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> {
+    write!(
+        stdout,
         "{}{}{}",
-        cursor::Goto(1,1),
+        cursor::Goto(1, 1),
         clear::AfterCursor,
-        cursor::Show)?;
+        cursor::Show
+    )?;
     stdout.flush()?;
-    stdout.suspend_raw_mode()
-        .unwrap_or_else(|error| {
-            eprintln!("Failed to leave raw terminal mode prior to suspend: {}", error);
-        });
+    stdout.suspend_raw_mode().unwrap_or_else(|error| {
+        eprintln!(
+            "Failed to leave raw terminal mode prior to suspend: {}",
+            error
+        );
+    });
 
     if let Err(error) = low_level::emulate_default_handler(SIGTSTP as i32) {
         eprintln!("Error raising SIGTSTP: {}", error);
@@ -482,14 +482,13 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>)
 }
 
 // Set up terminal after SIGTSTP or SIGSTOP.
-fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>)
-    -> Result<(), std::io::Error>
-{
-    stdout.activate_raw_mode()
-        .unwrap_or_else(|error| {
-            eprintln!("Failed to re-enter raw terminal mode after suspend: {}", error);
-            process::exit(1);
-        });
+fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> {
+    stdout.activate_raw_mode().unwrap_or_else(|error| {
+        eprintln!(
+            "Failed to re-enter raw terminal mode after suspend: {}",
+            error
+        );
+        process::exit(1);
+    });
     Ok(())
 }
-
