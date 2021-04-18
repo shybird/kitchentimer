@@ -1,3 +1,20 @@
+// Copyright 2021, Shy.
+//
+// This file is part of Kitchentimer.
+//
+// Kitchentimer is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Kitchentimer is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Kitchentimer.  If not, see <https://www.gnu.org/licenses/>.
+
 extern crate signal_hook;
 extern crate termion;
 pub mod alarm;
@@ -360,7 +377,10 @@ pub struct Config {
 
 impl Config {
     // Parse command line arguments into "config".
-    pub fn new(args: env::Args, alarm_roster: &mut AlarmRoster) -> Result<Config, String> {
+    pub fn new(
+        args: env::Args,
+        alarm_roster: &mut AlarmRoster
+    ) -> Result<Config, String> {
         let mut config = Config {
             quit: false,
             fancy: false,
@@ -482,7 +502,9 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> 
 }
 
 // Set up terminal after SIGTSTP or SIGSTOP.
-fn restore_after_suspend<W: Write>(stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> {
+fn restore_after_suspend<W: Write>(
+    stdout: &mut RawTerminal<W>
+) -> Result<(), std::io::Error> {
     stdout.activate_raw_mode().unwrap_or_else(|error| {
         eprintln!(
             "Failed to re-enter raw terminal mode after suspend: {}",

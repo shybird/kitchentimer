@@ -1,7 +1,8 @@
 [package]
 name = "kitchentimer"
-version = "0.0.1"
-authors = ["shy <shy@posteo.de>"]
+version = "0.1.0"
+authors = ["Shy <shy@posteo.de>"]
+license = "GPL-3.0-or-later"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
