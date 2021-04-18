@@ -41,7 +41,10 @@ impl Countdown {
     }
 
     // Draw countdown.
-    pub fn draw<W: Write>(&self, stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> {
+    pub fn draw<W: Write>(
+        &self,
+        stdout: &mut RawTerminal<W>
+    ) -> Result<(), std::io::Error> {
         if let Some(pos) = &self.position {
             if self.value < 3600 {
                 // Show minutes and seconds.
@@ -72,8 +75,14 @@ impl Countdown {
         Ok(())
     }
 
-    pub fn place(&mut self, layout: &Layout, alarm: &Alarm, offset: usize, index: usize) {
-        // Compute position.
+    // Compute position.
+    pub fn place(
+        &mut self,
+        layout: &Layout,
+        alarm: &Alarm,
+        offset: usize,
+        index: usize
+    ) {
         let mut col = layout.roster.col + 3 + UnicodeWidthStr::width(alarm.label.as_str()) as u16;
         let mut line = layout.roster.line + index as u16;
 
@@ -114,13 +123,17 @@ impl Alarm {
 pub struct AlarmRoster {
     list: Vec<Alarm>,
     offset: usize,
+    hints_shown: bool,
 }
 
 impl AlarmRoster {
     pub fn new() -> AlarmRoster {
         AlarmRoster {
             list: Vec::new(),
+            // Scrolling offset.
             offset: 0,
+            // Scrolling hint.
+            hints_shown: false,
         }
     }
 
@@ -276,11 +289,10 @@ impl AlarmRoster {
         layout: &mut Layout,
         config: &Config,
     ) -> Result<(), std::io::Error> {
-        // Match offset to layout.
+        // Adjust offset in case something changed, e.g. the terminal size.
         self.adjust_offset(&layout);
 
         for (i, alarm) in self.list.iter().skip(self.offset).enumerate() {
-            // Add 1 to compensate for the line "[...]".
             let line = layout.roster.line + i as u16;
 
             if self.offset > 0 && i == 0 {
@@ -290,25 +302,23 @@ impl AlarmRoster {
                     "{}{}{}{}",
                     cursor::Goto(layout.roster.col, line),
                     style::Faint,
-                    if config.fancy {
-                        "╶╴▲╶╴"
-                    } else {
-                        "[ ^ ]"
-                    },
+                    if config.fancy { "╶╴▲╶╴" } else { "[ ^ ]" },
                     style::Reset,
                 )?;
                 continue;
-            } else if i == layout.roster_height as usize {
+            } else if i as u16 == layout.roster_height {
                 // Indicate hidden items at bottom.
                 write!(
                     stdout,
-                    "{}{}{}{}",
+                    "{}{}{}{}{}",
                     cursor::Goto(layout.roster.col, line),
                     style::Faint,
-                    if config.fancy {
-                        "╶╴▼╶╴"
+                    if config.fancy { "╶╴▼╶╴" } else { "[ v ]" },
+                    if !self.hints_shown {
+                        self.hints_shown = true;
+                        " [Page Up/Down]"
                     } else {
-                        "[ v ]"
+                        ""
                     },
                     style::Reset,
                 )?;
@@ -326,8 +336,8 @@ impl AlarmRoster {
                         style::Invert,
                         &alarm.label,
                         style::NoInvert,
-                        color::Fg(color::Reset),
                         style::Reset,
+                        color::Fg(color::Reset),
                     )?;
                 }
                 false if config.fancy => {
@@ -349,8 +359,8 @@ impl AlarmRoster {
                         style::Bold,
                         style::Invert,
                         &alarm.label,
-                        color::Fg(color::Reset),
                         style::Reset,
+                        color::Fg(color::Reset),
                     )?;
                 }
                 false => {
@@ -424,7 +434,11 @@ impl AlarmRoster {
 }
 
 // Execute the command given on the command line.
-pub fn exec_command(command: &Vec<String>, elapsed: u32, label: &String) -> Option<Child> {
+pub fn exec_command(
+    command: &Vec<String>,
+    elapsed: u32,
+    label: &String
+) -> Option<Child> {
     let time = if elapsed < 3600 {
         format!("{:02}:{:02}", elapsed / 60, elapsed % 60)
     } else {
