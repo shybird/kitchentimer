@@ -139,7 +139,6 @@ impl AlarmRoster {
 
     // Parse string and add as alarm.
     pub fn add(&mut self, input: &String) -> Result<(), &'static str> {
-        let mut index = 0;
         let mut time: u32 = 0;
         let mut label: String;
         let time_str: &str;
@@ -155,28 +154,19 @@ impl AlarmRoster {
         }
 
         // Parse input into seconds.
-        if time_str.contains(':') {
-            for sub in time_str.rsplit(':') {
-                match sub.parse::<u32>() {
-                    // Valid.
-                    Ok(d) if d < 60 && index < 3 => time += d * 60u32.pow(index),
-                    // Passes as u32, but does not fit into time range.
-                    Ok(_) => return Err("Could not parse value as time."),
-                    // Ignore failure caused by an empty string.
-                    // TODO: Match error kind when stable. See documentation
-                    // for std::num::ParseIntError and
-                    // https://github.com/rust-lang/rust/issues/22639
-                    Err(_) if sub.is_empty() => (),
-                    // Could not parse to u32.
-                    Err(_) => return Err("Could not parse value as integer."),
-                }
-                index += 1;
-            }
-        } else {
-            // Parse as seconds only.
-            match time_str.parse::<u32>() {
-                Ok(d) => time = d,
-                Err(_) => return Err("Could not parse as integer."),
+        for (i, sub) in time_str.rsplit(':').enumerate() {
+            match sub.parse::<u32>() {
+                // Too many segments.
+                Ok(_) if i > 2 => return Err("Too many segments to parse as time."),
+                // Valid.
+                Ok(d) => time += d * 60u32.pow(i as u32),
+                // Ignore failure caused by an empty string.
+                // TODO: Match error kind when stable. See documentation
+                // for std::num::ParseIntError and
+                // https://github.com/rust-lang/rust/issues/22639
+                Err(_) if sub.is_empty() => (),
+                // Could not parse to u32.
+                Err(_) => return Err("Could not parse value as integer."),
             }
         }
 
@@ -187,9 +177,9 @@ impl AlarmRoster {
         if time >= 24 * 60 * 60 {
             return Err("Values >24h not supported.");
         };
-        // Filter out double entries.
+        // Filter out duplicate entries.
         if self.list.iter().any(|a| a.time == time) {
-            return Err("Already exists.");
+            return Err("Already exists. Duplicate entries not supported.");
         }
 
         // Label will never change from now on.
