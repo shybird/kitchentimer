@@ -1,8 +1,10 @@
+# kitchentimer
+
 Simple timing application for text terminals. Helper for preparing tea,
 coffee, pasta etc.
-
-Single large up-counting clock with optional alarm times. Alarm times may
-be given as command line arguments, read from stdin or entered interactively.
+Features a single large up-counting clock with optional alarm times. Alarm
+times may be given as command line arguments, read from stdin or entered
+interactively.
 
 
     USAGE: kitchentimer [-h|-v] [-e|--exec COMMAND] [-p] [-q] [ALARM[/LABEL]]
