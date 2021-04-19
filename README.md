@@ -6,6 +6,11 @@ Features a single large up-counting clock with optional alarm times. Alarm
 times may be given as command line arguments, read from stdin or entered
 interactively.
 
+## Installation
+
+    cargo install --git "https://git.twix.ws/shy/kitchentimer.git"
+
+## Usage
 
     USAGE: kitchentimer [-h|-v] [-e|--exec COMMAND] [-p] [-q] [ALARM[/LABEL]]
 
