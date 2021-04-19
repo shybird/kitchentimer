@@ -22,7 +22,6 @@ use crate::utils::*;
 use crate::Config;
 use std::io::BufRead;
 use std::io::Write;
-use std::process::{Child, Command, Stdio};
 use termion::raw::RawTerminal;
 use termion::{color, cursor, style};
 use unicode_width::UnicodeWidthStr;
@@ -437,43 +436,5 @@ impl AlarmRoster {
             }
         }
         Ok(())
-    }
-}
-
-// Execute the command given on the command line.
-pub fn exec_command(
-    command: &Vec<String>,
-    elapsed: u32,
-    label: &String
-) -> Option<Child> {
-    let time = if elapsed < 3600 {
-        format!("{:02}:{:02}", elapsed / 60, elapsed % 60)
-    } else {
-        format!(
-            "{:02}:{:02}:{:02}",
-            elapsed / 3600,
-            (elapsed / 60) % 60,
-            elapsed % 60
-        )
-    };
-
-    let mut args: Vec<String> = Vec::new();
-    // Build vector of command line arguments. Replace every occurrence of
-    // "{t}" and "{l}".
-    for s in command.iter().skip(1) {
-        args.push(s.replace("{t}", &time).replace("{l}", &label));
-    }
-
-    match Command::new(&command[0])
-        .args(args)
-        .stdout(Stdio::null())
-        .stdin(Stdio::null())
-        .spawn()
-    {
-        Ok(child) => Some(child),
-        Err(error) => {
-            eprintln!("Error: Could not execute command. ({})", error);
-            None
-        }
     }
 }

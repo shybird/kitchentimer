@@ -37,27 +37,8 @@ fn main() {
     }
 
     // Run main loop. Returns spawned child process if any.
-    let child = match run(config, alarm_roster) {
-        Ok(child) => child,
-        Err(error) => {
-            eprintln!("Main loop exited with error: {}", error);
-            process::exit(1);
-        }
-    };
-
-    // Wait for remaining spawned process to exit.
-    if let Some(mut child) = child {
-        eprint!(
-            "Waiting for spawned process (PID {}) to finish ...",
-            child.id()
-        );
-
-        match child.wait() {
-            Ok(status) if status.success() => eprintln!(" ok"),
-            // Unix only.
-            Ok(status) if status.code().is_none() => eprintln!(" interrupted ({})", status),
-            Ok(status) => eprintln!(" ok ({})", status),
-            Err(error) => eprintln!(" failed ({})", error),
-        }
+    if let Err(error) = run(config, alarm_roster) {
+        eprintln!("Main loop exited with error: {}", error);
+        process::exit(1);
     }
 }

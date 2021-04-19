@@ -17,20 +17,22 @@
 
 extern crate signal_hook;
 extern crate termion;
-pub mod alarm;
+mod alarm;
 mod buffer;
-pub mod clock;
-pub mod consts;
-pub mod layout;
+mod clock;
+mod consts;
+mod cradle;
+mod layout;
 #[cfg(test)]
 mod tests;
-pub mod utils;
+mod utils;
 
 pub use alarm::AlarmRoster;
-use alarm::{exec_command, Countdown};
+use alarm::Countdown;
 use buffer::Buffer;
 use clock::{font, Clock};
 pub use consts::ui::*;
+use cradle::Cradle;
 use layout::Layout;
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
@@ -43,9 +45,9 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use termion::{clear, cursor, style};
 
 pub fn run(
-    config: Config,
+    mut config: Config,
     mut alarm_roster: AlarmRoster,
-) -> Result<Option<process::Child>, std::io::Error> {
+) -> Result<(), std::io::Error> {
     let mut layout = Layout::new();
     // Initialise roster_width.
     layout.set_roster_width(alarm_roster.width());
@@ -57,7 +59,6 @@ pub fn run(
     let mut input_keys = async_stdin.keys();
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock().into_raw_mode()?;
-    let mut child: Option<process::Child> = None;
     let mut force_redraw = true;
 
     // Register signals.
@@ -129,28 +130,8 @@ pub fn run(
             }
 
             // Check on last spawned child process prior to processing the
-            // alarm roster and possibly starting a new one.
-            if let Some(ref mut spawn) = child {
-                match spawn.try_wait() {
-                    // Process exited successfully.
-                    Ok(Some(status)) if status.success() => child = None,
-                    // Abnormal exit.
-                    Ok(Some(status)) => {
-                        eprintln!(
-                            "Spawned process terminated with non-zero exit status. ({})",
-                            status
-                        );
-                        child = None;
-                    }
-                    // Process is still running.
-                    Ok(None) => (),
-                    // Other error.
-                    Err(error) => {
-                        eprintln!("Error executing command. ({})", error);
-                        child = None;
-                    }
-                }
-            }
+            // alarm roster and possibly spawning a new set.
+            config.commands.tend();
 
             // Check for exceeded alarms.
             if let Some(alarm) =
@@ -163,17 +144,9 @@ pub fn run(
                     // Write ASCII bell code.
                     write!(stdout, "{}", 0x07 as char)?;
 
-                    match config.command {
-                        // Run command if configured and no command is running.
-                        Some(ref command) if child.is_none() => {
-                            child = exec_command(command, alarm.time, &alarm.label);
-                        }
-                        // Last command is still running.
-                        Some(_) => {
-                            eprintln!("Not executing command, as its predecessor is still running")
-                        }
-                        None => (),
-                    }
+                    // Run commands.
+                    config.commands.run_all(alarm.time, &alarm.label);
+
                     // Quit if configured.
                     if config.quit && alarm_roster.idle() {
                         break;
@@ -365,14 +338,14 @@ pub fn run(
     write!(stdout, "{}{}{}", clear::All, cursor::Restore, cursor::Show)?;
     stdout.flush()?;
 
-    Ok(child)
+    Ok(())
 }
 
 pub struct Config {
     quit: bool,
     fancy: bool,
     font: &'static font::Font,
-    command: Option<Vec<String>>,
+    commands: Cradle,
 }
 
 impl Config {
@@ -385,7 +358,7 @@ impl Config {
             quit: false,
             fancy: false,
             font: &font::NORMAL,
-            command: None,
+            commands: Cradle::new(),
         };
         let mut iter = args.skip(1);
 
@@ -408,8 +381,9 @@ impl Config {
                     }
                     "-q" | "--quit" => config.quit = true,
                     "-e" | "--exec" => {
-                        if let Some(e) = iter.next() {
-                            config.command = Some(Config::parse_to_command(&e));
+                        if let Some(cmd) = iter.next() {
+                            //config.command = Some(Config::parse_to_command(&e));
+                            config.commands.add(Cradle::parse(&cmd));
                         } else {
                             return Err(format!("Missing parameter to \"{}\".", arg));
                         }
@@ -430,49 +404,6 @@ impl Config {
             } // All command line parameters processed.
         }
         Ok(config)
-    }
-
-    // Parse command line argument to --command into a vector of strings suitable
-    // for process::Command::new().
-    fn parse_to_command(input: &str) -> Vec<String> {
-        let mut command: Vec<String> = Vec::new();
-        let mut segment: String = String::new();
-        let mut quoted = false;
-        let mut escaped = false;
-
-        for c in input.chars() {
-            match c {
-                '\\' if !escaped => {
-                    // Next char is escaped. (If not escaped itself.)
-                    escaped = true;
-                    continue;
-                }
-                // Keep spaces when escaped or quoted.
-                ' ' if escaped || quoted => {
-                    &segment.push(' ');
-                }
-                // Otherwise end the current segment.
-                ' ' => {
-                    if !&segment.is_empty() {
-                        command.push(segment.clone());
-                        &segment.clear();
-                    }
-                }
-                // Quotation marks toggle quote.
-                '"' | '\'' if !escaped => quoted = !quoted,
-                // Carry everything else. Escape if found escaped.
-                _ => {
-                    if escaped {
-                        &segment.push('\\');
-                    }
-                    &segment.push(c);
-                }
-            }
-            escaped = false;
-        }
-        command.push(segment);
-        command.shrink_to_fit();
-        command
     }
 }
 
