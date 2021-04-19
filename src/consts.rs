@@ -40,17 +40,17 @@ PARAMETERS:
                         label.
 
 OPTIONS:
-  -h, --help            Show this help.
+  -h, --help            Show this usage message.
   -v, --version         Show version information.
-  -e, --exec [COMMAND]  Execute COMMAND on alarm. Occurrences of {t} will
-                        be replaced by the alarm time in (HH:)MM:SS format.
-                        Occurrences of {l} by alarm label.
+  -e, --exec [COMMAND]  Execute COMMAND on alarm. My be given multiple
+                        times. Occurrences of {l} will be replaced by the
+                        alarm label, {t} by alarm time in (HH:)MM:SS format.
   -p, --plain           Use simpler block chars to draw the clock.
   -f, --fancy           Make use of less common unicode characters.
   -q, --quit            Quit program after last alarm.
 
 SIGNALS: <SIGUSR1> Reset clock.
-         <SIGUSR2> Pause or un-pause clock."
+         <SIGUSR2> Pause or continue."
     );
     pub const MENUBAR: &str =
         "[0-9] Add alarm  [d] Delete alarm  [SPACE] Pause  [r] Reset  [c] Clear color  [q] Quit";
