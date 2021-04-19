@@ -15,7 +15,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Kitchentimer.  If not, see <https://www.gnu.org/licenses/>.
 
-extern crate unicode_segmentation;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub fn grapheme_truncate(input: &mut String, limit: usize, ellipse: char) {

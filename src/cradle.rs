@@ -114,7 +114,7 @@ impl Cradle {
 
     // Parse command line argument to --command into a vector of strings suitable
     // for process::Command::new().
-    pub fn parse(input: &str) -> Vec<String> {
+    pub fn parse(input: String) -> Vec<String> {
         let mut command: Vec<String> = Vec::new();
         let mut segment: String = String::new();
         let mut quoted = false;

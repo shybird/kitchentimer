@@ -17,6 +17,7 @@
 
 extern crate signal_hook;
 extern crate termion;
+extern crate unicode_segmentation;
 mod alarm;
 mod buffer;
 mod clock;
@@ -362,46 +363,41 @@ impl Config {
         };
         let mut iter = args.skip(1);
 
-        loop {
-            if let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "-h" | "--help" => {
-                        // Print usage information and exit
-                        println!("{}", USAGE);
-                        process::exit(0);
-                    }
-                    "-v" | "--version" => {
-                        println!("{} {}", NAME, VERSION);
-                        process::exit(0);
-                    }
-                    "-p" | "--plain" => config.font = &font::PLAIN,
-                    "-f" | "--fancy" => {
-                        config.fancy = true;
-                        config.font = &font::CHROME;
-                    }
-                    "-q" | "--quit" => config.quit = true,
-                    "-e" | "--exec" => {
-                        if let Some(cmd) = iter.next() {
-                            //config.command = Some(Config::parse_to_command(&e));
-                            config.commands.add(Cradle::parse(&cmd));
-                        } else {
-                            return Err(format!("Missing parameter to \"{}\".", arg));
-                        }
-                    }
-                    any if any.starts_with('-') => {
-                        // Unrecognized flag.
-                        return Err(format!("Unrecognized option: \"{}\"\nUse \"-h\" or \"--help\" for a list of valid command line options.", any));
-                    }
-                    any => {
-                        // Alarm to add.
-                        if let Err(error) = alarm_roster.add(&String::from(any)) {
-                            return Err(format!("Error adding \"{}\" as alarm. ({})", any, error));
-                        }
+        while let Some(arg) = iter.next() {
+            match arg.as_str() {
+                "-h" | "--help" => {
+                    // Print usage information and exit
+                    println!("{}", USAGE);
+                    process::exit(0);
+                }
+                "-v" | "--version" => {
+                    println!("{} {}", NAME, VERSION);
+                    process::exit(0);
+                }
+                "-p" | "--plain" => config.font = &font::PLAIN,
+                "-f" | "--fancy" => {
+                    config.fancy = true;
+                    config.font = &font::CHROME;
+                }
+                "-q" | "--quit" => config.quit = true,
+                "-e" | "--exec" => {
+                    if let Some(cmd) = iter.next() {
+                        config.commands.add(Cradle::parse(cmd));
+                    } else {
+                        return Err(format!("Missing parameter to \"{}\".", arg));
                     }
                 }
-            } else {
-                break;
-            } // All command line parameters processed.
+                any if any.starts_with('-') => {
+                    // Unrecognized flag.
+                    return Err(format!("Unrecognized option: \"{}\"\nUse \"-h\" or \"--help\" for a list of valid command line options.", any));
+                }
+                any => {
+                    // Alarm to add.
+                    if let Err(error) = alarm_roster.add(&String::from(any)) {
+                        return Err(format!("Error adding \"{}\" as alarm. ({})", any, error));
+                    }
+                }
+            }
         }
         Ok(config)
     }
