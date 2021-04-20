@@ -17,13 +17,13 @@
 
 use crate::clock::{Clock, font};
 use crate::layout::Layout;
-use crate::Config;
+use crate::{Config, Cradle};
 
 fn default_config() -> Config {
     Config {
         fancy: false,
         quit: false,
-        command: None,
+        commands: Cradle::new(),
         font: &font::NORMAL,
     }
 }
