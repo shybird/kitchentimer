@@ -77,9 +77,9 @@ pub fn run(
     });
 
     // Main loop entry.
-    loop {
+    'main: loop {
         // Process received signals.
-        'outer: for signal in signals.pending() {
+        for signal in signals.pending() {
             match signal {
                 // Suspend execution on SIGTSTP.
                 SIGTSTP => suspend(&mut stdout)?,
@@ -90,7 +90,7 @@ pub fn run(
                 }
                 SIGWINCH => layout.schedule_recalc(),
                 // Exit main loop on SIGTERM and SIGINT.
-                SIGTERM | SIGINT => break 'outer,
+                SIGTERM | SIGINT => break 'main,
                 // Reset clock on SIGUSR1.
                 SIGUSR1 => {
                     clock.reset();
@@ -220,9 +220,8 @@ pub fn run(
             // Timeout. Expected.
             Err(mpsc::RecvTimeoutError::Timeout) => (),
             // Disconnect.
-            // TODO: When? Why? What to do?
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                eprintln!("Unexpected disconnect from input thread.");
+                eprintln!("Unexpected end of input thread.");
                 break;
             }
             Ok(key) => {
