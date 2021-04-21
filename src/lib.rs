@@ -32,7 +32,7 @@ pub use alarm::AlarmRoster;
 use alarm::Countdown;
 use buffer::Buffer;
 use clock::{font, Clock};
-pub use consts::ui::*;
+use consts::ui::*;
 use cradle::Cradle;
 use layout::Layout;
 use signal_hook::consts::signal::*;
@@ -40,6 +40,7 @@ use signal_hook::iterator::Signals;
 use signal_hook::low_level;
 use std::io::Write;
 use std::{env, process, thread, time};
+use std::sync::mpsc;
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::{IntoRawMode, RawTerminal};
@@ -55,9 +56,6 @@ pub fn run(
     let mut clock = Clock::new(&config);
     let mut countdown = Countdown::new();
     let mut buffer = Buffer::new();
-
-    let async_stdin = termion::async_stdin();
-    let mut input_keys = async_stdin.keys();
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock().into_raw_mode()?;
     let mut force_redraw = true;
@@ -66,6 +64,17 @@ pub fn run(
     let mut signals = Signals::new(&[
         SIGTSTP, SIGCONT, SIGWINCH, SIGTERM, SIGINT, SIGUSR1, SIGUSR2,
     ])?;
+
+    // Read input keys and send them back to the main thread.
+    let tty = termion::get_tty()?;
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        for key in tty.keys() {
+            if tx.send(key).is_err() {
+                return;
+            }
+        }
+    });
 
     // Main loop entry.
     loop {
@@ -207,131 +216,138 @@ pub fn run(
         }
 
         // Process input.
-        if let Some(key) = input_keys.next() {
-            match key.expect("Error reading input") {
-                // Enter.
-                Key::Char('\n') => {
-                    if !buffer.is_empty() {
-                        if let Err(e) = alarm_roster.add(buffer.read()) {
-                            // Error while processing input buffer.
-                            buffer.message(e);
-                        } else {
-                            // Input buffer processed without error.
-                            layout.set_roster_width(alarm_roster.width());
-                        }
-                        buffer.clear();
-                        buffer.visible = false;
-                        force_redraw = true;
-                    }
-                }
-                // Escape and ^U clear input buffer.
-                Key::Esc | Key::Ctrl('u') => {
-                    buffer.reset();
-                    buffer.visible = false;
-                    force_redraw = true;
-                }
-                // ^W removes last word.
-                Key::Ctrl('w') => {
-                    buffer.strip_word();
-                    if buffer.is_empty() {
-                        buffer.visible = false;
-                        force_redraw = true;
-                    }
-                }
-                // Backspace.
-                Key::Backspace => {
-                    // Delete last char in buffer.
-                    buffer.strip_char();
-                    if buffer.is_empty() {
-                        buffer.visible = false;
-                        force_redraw = true;
-                    }
-                }
-                // Set clock.
-                Key::Up if clock.paused => {
-                    clock.shift(10);
-                    // We would very likely not detect us passing the hour
-                    // barrier and would panic when trying to draw hours
-                    // without position if we do not schedule a recalculation
-                    // here.
-                    layout.schedule_recalc();
-                    force_redraw = true;
-                }
-                Key::Down if clock.paused => {
-                    clock.shift(-10);
-                    alarm_roster.time_travel(&mut clock);
-                    layout.schedule_recalc();
-                    force_redraw = true;
-                }
-                // Scroll alarm roster.
-                Key::PageUp => {
-                    alarm_roster.scroll_up(&layout);
-                    force_redraw = true;
-                }
-                Key::PageDown => {
-                    alarm_roster.scroll_down(&layout);
-                    force_redraw = true;
-                }
-                // Forward every char if in insert mode.
-                Key::Char(c) if buffer.visible => {
-                    buffer.push(c);
-                }
-                // Reset clock on 'r'.
-                Key::Char('r') => {
-                    clock.reset();
-                    alarm_roster.reset_all();
-                    layout.schedule_recalc();
-                    force_redraw = true;
-                }
-                // (Un-)Pause on space.
-                Key::Char(' ') => {
-                    clock.toggle();
-                    force_redraw = true;
-                }
-                // Clear clock color on 'c'.
-                Key::Char('c') => {
-                    clock.color_index = None;
-                    force_redraw = true;
-                }
-                // Delete last alarm on 'd'.
-                Key::Char('d') => {
-                    if alarm_roster.pop().is_some() {
-                        // If we remove the last alarm we have to reset "countdown"
-                        // manually. It is safe to do it anyway.
-                        layout.set_roster_width(alarm_roster.width());
-                        countdown.reset();
-                        force_redraw = true;
-                    }
-                }
-                // Exit on q and ^C.
-                Key::Char('q') | Key::Ctrl('c') => break,
-                // Force redraw on ^R.
-                Key::Ctrl('r') => force_redraw = true,
-                // Suspend an ^Z.
-                Key::Ctrl('z') => {
-                    suspend(&mut stdout)?;
-                    // Clear SIGCONT, as we have already taken care to reset
-                    // the terminal.
-                    //signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
-                    force_redraw = true;
-                    // Jump to the start of the main loop.
-                    continue;
-                }
-                Key::Char(c) => {
-                    if c.is_ascii_digit() {
-                        buffer.push(c);
-                        buffer.visible = true;
-                        force_redraw = true;
-                    } else if !buffer.is_empty() && c == ':' {
-                        buffer.push(':');
-                    }
-                }
-                // Any other key.
-                _ => (),
+        match rx.recv_timeout(time::Duration::from_millis(250)) {
+            // Timeout. Expected.
+            Err(mpsc::RecvTimeoutError::Timeout) => (),
+            // Disconnect.
+            // TODO: When? Why? What to do?
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                eprintln!("Unexpected disconnect from input thread.");
+                break;
             }
-        } else {
-            // Main loop delay. Skipped after key press.
-            thread::sleep(time::Duration::from_millis(100));
+            Ok(key) => {
+                match key.expect("Error reading input") {
+                    // Enter.
+                    Key::Char('\n') => {
+                        if !buffer.is_empty() {
+                            if let Err(e) = alarm_roster.add(buffer.read()) {
+                                // Error while processing input buffer.
+                                buffer.message(e);
+                            } else {
+                                // Input buffer processed without error.
+                                layout.set_roster_width(alarm_roster.width());
+                            }
+                            buffer.clear();
+                            buffer.visible = false;
+                            force_redraw = true;
+                        }
+                    }
+                    // Escape and ^U clear input buffer.
+                    Key::Esc | Key::Ctrl('u') => {
+                        buffer.reset();
+                        buffer.visible = false;
+                        force_redraw = true;
+                    }
+                    // ^W removes last word.
+                    Key::Ctrl('w') => {
+                        buffer.strip_word();
+                        if buffer.is_empty() {
+                            buffer.visible = false;
+                            force_redraw = true;
+                        }
+                    }
+                    // Backspace.
+                    Key::Backspace => {
+                        // Delete last char in buffer.
+                        buffer.strip_char();
+                        if buffer.is_empty() {
+                            buffer.visible = false;
+                            force_redraw = true;
+                        }
+                    }
+                    // Set clock.
+                    Key::Up if clock.paused => {
+                        clock.shift(10);
+                        // We would very likely not detect us passing the hour
+                        // barrier and would panic when trying to draw hours
+                        // without position if we do not schedule a recalculation
+                        // here.
+                        layout.schedule_recalc();
+                        force_redraw = true;
+                    }
+                    Key::Down if clock.paused => {
+                        clock.shift(-10);
+                        alarm_roster.time_travel(&mut clock);
+                        layout.schedule_recalc();
+                        force_redraw = true;
+                    }
+                    // Scroll alarm roster.
+                    Key::PageUp => {
+                        alarm_roster.scroll_up(&layout);
+                        force_redraw = true;
+                    }
+                    Key::PageDown => {
+                        alarm_roster.scroll_down(&layout);
+                        force_redraw = true;
+                    }
+                    // Forward every char if in insert mode.
+                    Key::Char(c) if buffer.visible => {
+                        buffer.push(c);
+                    }
+                    // Reset clock on 'r'.
+                    Key::Char('r') => {
+                        clock.reset();
+                        alarm_roster.reset_all();
+                        layout.schedule_recalc();
+                        force_redraw = true;
+                    }
+                    // (Un-)Pause on space.
+                    Key::Char(' ') => {
+                        clock.toggle();
+                        force_redraw = true;
+                    }
+                    // Clear clock color on 'c'.
+                    Key::Char('c') => {
+                        clock.color_index = None;
+                        force_redraw = true;
+                    }
+                    // Delete last alarm on 'd'.
+                    Key::Char('d') => {
+                        if alarm_roster.pop().is_some() {
+                            // If we remove the last alarm we have to reset "countdown"
+                            // manually. It is safe to do it anyway.
+                            layout.set_roster_width(alarm_roster.width());
+                            countdown.reset();
+                            force_redraw = true;
+                        }
+                    }
+                    // Exit on q and ^C.
+                    Key::Char('q') | Key::Ctrl('c') => break,
+                    // Force redraw on ^R.
+                    Key::Ctrl('r') => force_redraw = true,
+                    // Suspend an ^Z.
+                    Key::Ctrl('z') => {
+                        suspend(&mut stdout)?;
+                        // Clear SIGCONT, as we have already taken care to reset
+                        // the terminal.
+                        //signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
+                        force_redraw = true;
+                        // Jump to the start of the main loop.
+                        continue;
+                    }
+                    Key::Char(c) => {
+                        if c.is_ascii_digit() {
+                            buffer.push(c);
+                            buffer.visible = true;
+                            force_redraw = true;
+                        } else if !buffer.is_empty() && c == ':' {
+                            buffer.push(':');
+                        }
+                    }
+                    // Any other key.
+                    _ => (),
+                }
+            }
         }
     }
 

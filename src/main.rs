@@ -34,6 +34,9 @@ fn main() {
             eprintln!("Error while reading alarm times from stdin. ({})", e);
             process::exit(1);
         }
+    } else {
+        // We don't need stdin anymore.
+        drop(stdin);
     }
 
     // Run main loop. Returns spawned child process if any.
