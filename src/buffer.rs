@@ -52,7 +52,12 @@ impl Buffer {
     pub fn push(&mut self, value: char) {
         // Reset error message.
         self.message = None;
-        self.content.push(value);
+        match value {
+            // Replace tabs by four spaces.
+            '\t' => self.content.push_str("    "),
+            // Append anything else as is.
+            _ => self.content.push(value),
+        }
     }
 
     // Remove last char.
