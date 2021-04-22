@@ -78,36 +78,6 @@ pub fn run(
 
     // Main loop entry.
     'main: loop {
-        // Process received signals.
-        for signal in signals.pending() {
-            match signal {
-                // Suspend execution on SIGTSTP.
-                SIGTSTP => suspend(&mut stdout)?,
-                // Continuing after SIGTSTP or SIGSTOP.
-                SIGCONT => {
-                    restore_after_suspend(&mut stdout)?;
-                    force_redraw = true;
-                }
-                SIGWINCH => layout.schedule_recalc(),
-                // Exit main loop on SIGTERM and SIGINT.
-                SIGTERM | SIGINT => break 'main,
-                // Reset clock on SIGUSR1.
-                SIGUSR1 => {
-                    clock.reset();
-                    alarm_roster.reset_all();
-                    layout.schedule_recalc();
-                    force_redraw = true;
-                }
-                // (Un-)Pause clock on SIGUSR2.
-                SIGUSR2 => {
-                    clock.toggle();
-                    force_redraw = true;
-                }
-                // We didn't register anything else.
-                _ => unreachable!(),
-            }
-        }
-
         // Update elapsed time.
         let elapsed = if clock.paused {
             clock.elapsed
@@ -340,6 +310,37 @@ pub fn run(
                 }
             }
         }
+
+        // Process received signals.
+        for signal in signals.pending() {
+            match signal {
+                // Suspend execution on SIGTSTP.
+                SIGTSTP => suspend(&mut stdout)?,
+                // Continuing after SIGTSTP or SIGSTOP.
+                SIGCONT => {
+                    restore_after_suspend(&mut stdout)?;
+                    force_redraw = true;
+                }
+                SIGWINCH => layout.schedule_recalc(),
+                // Exit main loop on SIGTERM and SIGINT.
+                SIGTERM | SIGINT => break 'main,
+                // Reset clock on SIGUSR1.
+                SIGUSR1 => {
+                    clock.reset();
+                    alarm_roster.reset_all();
+                    layout.schedule_recalc();
+                    force_redraw = true;
+                }
+                // (Un-)Pause clock on SIGUSR2.
+                SIGUSR2 => {
+                    clock.toggle();
+                    force_redraw = true;
+                }
+                // We didn't register anything else.
+                _ => unreachable!(),
+            }
+        }
+
     }
 
     // Main loop exited. Clear screen and restore cursor.
