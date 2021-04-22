@@ -19,7 +19,6 @@ use crate::clock::Clock;
 use crate::consts::{COLOR, LABEL_SIZE_LIMIT};
 use crate::layout::{Layout, Position};
 use crate::utils::*;
-use crate::Config;
 use std::io::BufRead;
 use std::io::Write;
 use termion::raw::RawTerminal;
@@ -293,7 +292,6 @@ impl AlarmRoster {
         &mut self,
         stdout: &mut RawTerminal<W>,
         layout: &mut Layout,
-        config: &Config,
     ) -> Result<(), std::io::Error> {
         // Adjust offset in case something changed, e.g. the terminal size.
         self.adjust_offset(&layout);
@@ -305,10 +303,9 @@ impl AlarmRoster {
                 // Indicate hidden items at top.
                 write!(
                     stdout,
-                    "{}{}{}{}",
+                    "{}{}[ ^ ]{}",
                     cursor::Goto(layout.roster.col, line),
                     style::Faint,
-                    if config.fancy { "╶╴▲╶╴" } else { "[ ^ ]" },
                     style::Reset,
                 )?;
                 continue;
@@ -316,10 +313,9 @@ impl AlarmRoster {
                 // Indicate hidden items at bottom.
                 write!(
                     stdout,
-                    "{}{}{}{}{}",
+                    "{}{}[ v ]{}{}",
                     cursor::Goto(layout.roster.col, line),
                     style::Faint,
-                    if config.fancy { "╶╴▼╶╴" } else { "[ v ]" },
                     if !self.hints_shown {
                         self.hints_shown = true;
                         " [Page Up/Down]"
@@ -332,30 +328,6 @@ impl AlarmRoster {
             }
 
             match alarm.exceeded {
-                true if config.fancy => {
-                    write!(
-                        stdout,
-                        "{}{}{}{} {} {}🭬{}{}",
-                        cursor::Goto(layout.roster.col, line),
-                        color::Fg(COLOR[alarm.color_index]),
-                        style::Bold,
-                        style::Invert,
-                        &alarm.label,
-                        style::NoInvert,
-                        style::Reset,
-                        color::Fg(color::Reset),
-                    )?;
-                }
-                false if config.fancy => {
-                    write!(
-                        stdout,
-                        "{}{}█🭬{}{}",
-                        cursor::Goto(layout.roster.col, line),
-                        color::Fg(COLOR[alarm.color_index]),
-                        color::Fg(color::Reset),
-                        &alarm.label,
-                    )?;
-                }
                 true => {
                     write!(
                         stdout,
