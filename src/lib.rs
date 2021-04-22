@@ -290,9 +290,7 @@ pub fn run(
                         force_redraw = true;
                     }
                     // Forward every char if in insert mode.
-                    Key::Char(c) if buffer.visible => {
-                        buffer.push(c);
-                    }
+                    Key::Char(c) if buffer.visible => buffer.push(c),
                     // Reset clock on 'r'.
                     Key::Char('r') => {
                         clock.reset();
@@ -322,25 +320,19 @@ pub fn run(
                     }
                     // Exit on q and ^C.
                     Key::Char('q') | Key::Ctrl('c') => break,
+                    // Exit immediately on ^\.
+                    Key::Ctrl('4') => process::exit(1),
                     // Force redraw on ^R.
                     Key::Ctrl('r') => force_redraw = true,
                     // Suspend an ^Z.
                     Key::Ctrl('z') => {
                         suspend(&mut stdout)?;
-                        // Clear SIGCONT, as we have already taken care to reset
-                        // the terminal.
-                        //signal.compare_and_swap(SIGCONT, 0, Ordering::Relaxed);
                         force_redraw = true;
-                        // Jump to the start of the main loop.
-                        continue;
                     }
                     Key::Char(c) => {
                         if c.is_ascii_digit() {
                             buffer.push(c);
                             buffer.visible = true;
-                            force_redraw = true;
-                        } else if !buffer.is_empty() && c == ':' {
-                            buffer.push(':');
                         }
                     }
                     // Any other key.
@@ -429,7 +421,7 @@ fn suspend<W: Write>(stdout: &mut RawTerminal<W>) -> Result<(), std::io::Error> 
         );
     });
 
-    if let Err(error) = low_level::emulate_default_handler(SIGTSTP as i32) {
+    if let Err(error) = low_level::emulate_default_handler(SIGSTOP as i32) {
         eprintln!("Error raising SIGTSTP: {}", error);
     }
 
