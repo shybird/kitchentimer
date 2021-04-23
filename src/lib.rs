@@ -319,6 +319,7 @@ pub fn run(
                 // Continuing after SIGTSTP or SIGSTOP.
                 SIGCONT => {
                     restore_after_suspend(&mut stdout)?;
+                    layout.schedule_recalc();
                     force_redraw = true;
                 }
                 SIGWINCH => layout.schedule_recalc(),
