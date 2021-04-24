@@ -1,6 +1,6 @@
 # kitchentimer
 
-Simple timing application for text terminals. Helper for preparing tea,
+Small timing application for text terminals. Helper for preparing tea,
 coffee, pasta etc.
 Features a single large up-counting clock with optional alarm times. Alarm
 times may be given as command line arguments, read from stdin or entered
@@ -8,7 +8,7 @@ interactively.
 
 ## Installation
 
-    cargo install --git "https://git.twix.ws/shy/kitchentimer.git"
+    cargo install --git "https://github.com/shybird/kitchentimer.git"
 
 ## Usage
 
